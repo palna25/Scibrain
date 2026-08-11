@@ -1,0 +1,51 @@
+from fastapi import FastAPI
+from sqlalchemy import text
+
+from app.database.postgres import engine
+from app.routes.auth import router as auth_router
+from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI(
+    title="SciBrain API",
+    description="Backend API for SciBrain Research Intelligence Platform",
+    version="1.0.0"
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(auth_router)
+
+
+@app.get("/")
+def root():
+    return {
+        "message": "SciBrain API is running"
+    }
+
+
+@app.get("/api/health/db")
+def database_health():
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+
+        return {
+            "status": "success",
+            "database": "PostgreSQL connected"
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "database": "PostgreSQL connection failed",
+            "detail": str(e)
+        }
+        
