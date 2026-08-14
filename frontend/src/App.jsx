@@ -52,6 +52,8 @@ import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
+import Papers from "./pages/Papers";
+import PaperDetails from "./pages/PaperDetails";
 import Settings from "./pages/Settings";
 
 import AppLayout from "./components/AppLayout";
@@ -107,6 +109,24 @@ function App() {
             }
           />
 
+          <Route
+            path="/papers"
+            element={
+              <ProtectedRoute>
+                <Papers />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Paper Details */}
+          <Route
+            path="/papers/:paperId"
+            element={
+              <ProtectedRoute>
+                <PaperDetails />
+              </ProtectedRoute>
+            }
+          />
 
           <Route
             path="/settings"
