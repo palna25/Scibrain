@@ -48,7 +48,13 @@ console.log("LOGIN RESPONSE:", data);
   })
 );
 
-    navigate("/dashboard");
+if (data.user.role === "admin") {
+  navigate("/admin");
+} else {
+  navigate("/dashboard");
+}
+
+    
     } catch (err) {
       setError(err.message || "Something went wrong.");
     } finally {

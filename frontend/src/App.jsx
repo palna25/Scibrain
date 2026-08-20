@@ -1,51 +1,3 @@
-/* import Sidebar from "./components/Sidebar";
-import Navbar from "./components/Navbar";
-import Dashboard from "./pages/Dashboard";
-import PaperUpload from "./pages/PaperUpload";
-
-
-function App(){
-
- return (
-
-  <div className="flex min-h-screen bg-slate-950">
-
-    <Sidebar/>
-
-    <div className="
-        flex-1
-        flex
-        flex-col
-      ">
-
-
-        <Navbar/>
-
-
-        <main
-          className="
-            flex-1
-            p-8
-            overflow-auto
-          "
-        >
-
-      
-      <Dashboard/>
-      <PaperUpload/>
-    </main>
-
-  </div>
-  </div>
-
- )
-
-}
-
-
-export default App; */
-
-
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import Landing from "./pages/Landing";
@@ -55,7 +7,8 @@ import Dashboard from "./pages/Dashboard";
 import Papers from "./pages/Papers";
 import PaperDetails from "./pages/PaperDetails";
 import Settings from "./pages/Settings";
-
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminLayout from "./components/AdminLayout";
 import AppLayout from "./components/AppLayout";
 
 
@@ -64,6 +17,25 @@ function ProtectedRoute({ children }) {
 
   if (!token) {
     return <Navigate to="/login" replace />;
+  }
+
+  return children;
+}
+
+
+function AdminRoute({ children }) {
+  const token = localStorage.getItem("scibrain_token");
+
+  const user = JSON.parse(
+    localStorage.getItem("scibrain_user") || "null"
+  );
+
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (!user || user.role !== "admin") {
+    return <Navigate to="/dashboard" replace />;
   }
 
   return children;
@@ -96,7 +68,7 @@ function App() {
           />
 
 
-          {/* ================= PROTECTED ================= */}
+          {/* ================= RESEARCHER ================= */}
 
           <Route
             path="/dashboard"
@@ -118,7 +90,6 @@ function App() {
             }
           />
 
-          {/* Paper Details */}
           <Route
             path="/papers/:paperId"
             element={
@@ -139,6 +110,19 @@ function App() {
             }
           />
 
+
+          {/* ================= ADMIN ================= */}
+
+          <Route
+          path="/admin"
+          element={
+            <AdminRoute>
+              <AdminLayout>
+                <AdminDashboard />
+              </AdminLayout>
+            </AdminRoute>
+          }
+        />
 
           {/* ================= FALLBACK ================= */}
 

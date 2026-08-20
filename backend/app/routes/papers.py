@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from bson import ObjectId
 
 from app.database.mongodb import papers_collection
-
+from app.services.analysis import analyze_paper
 
 router = APIRouter(
     prefix="/api/papers",
@@ -240,7 +240,95 @@ async def get_papers():
             detail=f"Failed to fetch papers: {str(error)}"
         )
 
+# ==========================================================
+# GET PAPER STATISTICS
+# ==========================================================
 
+@router.get("/stats")
+async def get_paper_stats():
+
+    try:
+
+        total_papers = papers_collection.count_documents({})
+
+        analyzed_papers = papers_collection.count_documents({
+            "status": "analyzed"
+        })
+
+        papers = list(
+            papers_collection.find(
+                {
+                    "status": "analyzed",
+                    "analysis": {"$ne": None}
+                },
+                {
+                    "analysis": 1
+                }
+            )
+        )
+
+        # --------------------------------------------------
+        # Extract concepts
+        # --------------------------------------------------
+
+        concepts = set()
+
+        potential_gaps = 0
+
+        for paper in papers:
+
+            analysis = paper.get("analysis") or {}
+
+            # Datasets
+            for dataset in analysis.get("datasets", []):
+                if dataset:
+                    concepts.add(
+                        f"dataset:{dataset.strip().lower()}"
+                    )
+
+            # Metrics
+            for metric in analysis.get("metrics", []):
+                if metric:
+                    concepts.add(
+                        f"metric:{metric.strip().lower()}"
+                    )
+
+            # Methodology statements
+            for method in analysis.get("methodology", []):
+                if method:
+                    concepts.add(
+                        f"method:{method.strip().lower()}"
+                    )
+
+            # --------------------------------------------------
+            # Potential research gaps
+            #
+            # Currently derived from limitations + future work.
+            # This is NOT an LLM-generated gap detector yet.
+            # --------------------------------------------------
+
+            potential_gaps += len(
+                analysis.get("limitations", [])
+            )
+
+            potential_gaps += len(
+                analysis.get("future_work", [])
+            )
+
+        return {
+            "total_papers": total_papers,
+            "analyzed_papers": analyzed_papers,
+            "knowledge_nodes": len(concepts),
+            "contradictions": 0,
+            "research_gaps": potential_gaps,
+        }
+
+    except Exception as error:
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to calculate paper statistics: {str(error)}"
+        )
 # ==========================================================
 # GET SINGLE PAPER
 # ==========================================================
@@ -316,51 +404,28 @@ async def get_paper(paper_id: str):
 # ==========================================================
 
 @router.post("/{paper_id}/analyze")
-async def analyze_paper(paper_id: str):
+async def analyze_paper_route(paper_id: str):
 
-    # ------------------------------------------------------
-    # Find paper
-    # ------------------------------------------------------
-
-    paper = papers_collection.find_one(
-        {
-            "_id": paper_id
-        }
-    )
+    paper = papers_collection.find_one({
+        "_id": paper_id
+    })
 
     if not paper:
-
         raise HTTPException(
             status_code=404,
             detail="Paper not found."
         )
 
-    # ------------------------------------------------------
-    # Check extracted text
-    # ------------------------------------------------------
-
-    extracted_text = paper.get(
-        "text",
-        ""
-    )
+    extracted_text = paper.get("text", "")
 
     if not extracted_text.strip():
-
         raise HTTPException(
             status_code=400,
             detail="No extracted text is available for analysis."
         )
 
-    # ------------------------------------------------------
-    # Mark paper as processing
-    # ------------------------------------------------------
-
     papers_collection.update_one(
-
-        {
-            "_id": paper_id
-        },
-
+        {"_id": paper_id},
         {
             "$set": {
                 "status": "processing",
@@ -371,98 +436,28 @@ async def analyze_paper(paper_id: str):
 
     try:
 
-        # ==================================================
-        # TEMPORARY ANALYSIS RESULT
-        # ==================================================
-        #
-        # We will replace this section with the actual
-        # AI analysis engine in the next step.
-        #
-
-        analysis = {
-
-            "summary": "",
-
-            "problem": "",
-
-            "methodology": [],
-
-            "datasets": [],
-
-            "metrics": [],
-
-            "findings": [],
-
-            "limitations": [],
-
-            "future_work": [],
-
-        }
-
-        # --------------------------------------------------
-        # Save analysis
-        # --------------------------------------------------
-
-        papers_collection.update_one(
-
-            {
-                "_id": paper_id
-            },
-
-            {
-                "$set": {
-
-                    "analysis": analysis,
-
-                    "status": "analyzed",
-
-                    "processing_error": None,
-
-                    "analyzed_at": datetime.now(
-                        timezone.utc
-                    ),
-                }
-            }
-        )
+        analysis = analyze_paper(paper_id)
 
         return {
-
             "id": paper_id,
-
             "status": "analyzed",
-
             "message": "Paper analysis completed successfully.",
-
             "analysis": analysis,
         }
 
     except Exception as error:
 
-        # --------------------------------------------------
-        # Save processing error
-        # --------------------------------------------------
-
         papers_collection.update_one(
-
-            {
-                "_id": paper_id
-            },
-
+            {"_id": paper_id},
             {
                 "$set": {
-
                     "status": "error",
-
-                    "processing_error": str(
-                        error
-                    ),
+                    "processing_error": str(error),
                 }
             }
         )
 
         raise HTTPException(
-
             status_code=500,
-
             detail=f"Paper analysis failed: {str(error)}"
         )
