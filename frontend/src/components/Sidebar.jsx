@@ -35,11 +35,6 @@ const navigation = [
     icon: Network,
   },
   {
-    name: "Contradictions",
-    path: "/contradictions",
-    icon: GitBranch,
-  },
-  {
     name: "Research Gaps",
     path: "/research-gaps",
     icon: Lightbulb,
