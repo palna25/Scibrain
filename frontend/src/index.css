@@ -1,4 +1,4 @@
-@import "tailwindcss";
+/*@import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
@@ -56,10 +56,10 @@
   --card-foreground: oklch(0.97 0.01 265);
 
   --popover: oklch(0.14 0.025 265);
-  --popover-foreground: oklch(0.97 0.01 265);
+  --popover-foreground: oklch(0.97 0.01 265);*/
 
   /* SciBrain Indigo */
-  --primary: oklch(0.58 0.22 275);
+ /* --primary: oklch(0.58 0.22 275);
   --primary-foreground: oklch(0.99 0 0);
 
   --secondary: oklch(0.20 0.025 265);
@@ -83,10 +83,10 @@
   --chart-4: oklch(0.65 0.18 145);
   --chart-5: oklch(0.70 0.18 60);
 
-  --radius: 0.75rem;
+  --radius: 0.75rem;*/
 
   /* Sidebar */
-  --sidebar: oklch(0.08 0.025 265);
+ /* --sidebar: oklch(0.08 0.025 265);
   --sidebar-foreground: oklch(0.92 0.01 265);
   --sidebar-primary: oklch(0.58 0.22 275);
   --sidebar-primary-foreground: oklch(0.99 0 0);
@@ -94,7 +94,48 @@
   --sidebar-accent-foreground: oklch(0.95 0.01 265);
   --sidebar-border: oklch(0.20 0.025 265);
   --sidebar-ring: oklch(0.58 0.22 275);
-}
+}*/
+/* =========================================
+   SciBrain LIGHT THEME
+   ========================================= */
+
+/*.light {
+  --background: oklch(0.98 0.005 265);
+  --foreground: oklch(0.16 0.02 265);
+
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.16 0.02 265);
+
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.16 0.02 265);
+
+  --primary: oklch(0.58 0.22 275);
+  --primary-foreground: oklch(0.99 0 0);
+
+  --secondary: oklch(0.95 0.01 265);
+  --secondary-foreground: oklch(0.22 0.02 265);
+
+  --muted: oklch(0.95 0.01 265);
+  --muted-foreground: oklch(0.48 0.025 265);
+
+  --accent: oklch(0.95 0.025 275);
+  --accent-foreground: oklch(0.22 0.02 265);
+
+  --destructive: oklch(0.58 0.22 25);
+
+  --border: oklch(0.88 0.015 265);
+  --input: oklch(0.90 0.015 265);
+  --ring: oklch(0.58 0.22 275);
+
+  --sidebar: oklch(0.97 0.008 265);
+  --sidebar-foreground: oklch(0.20 0.02 265);
+  --sidebar-primary: oklch(0.58 0.22 275);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.93 0.025 275);
+  --sidebar-accent-foreground: oklch(0.22 0.02 265);
+  --sidebar-border: oklch(0.88 0.015 265);
+  --sidebar-ring: oklch(0.58 0.22 275);
+}*/
 /* :root {
     --background: oklch(1 0 0);
     --foreground: oklch(0.145 0 0);
@@ -164,7 +205,7 @@
     --sidebar-ring: oklch(0.556 0 0);
 } */
 
-@layer base {
+/* @layer base {
   * {
     @apply border-border outline-ring/50;
     }
@@ -174,4 +215,287 @@
   html {
     @apply font-sans;
     }
+} */
+
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: "Geist Variable", sans-serif;
+
+  /* ================================
+     SciBrain semantic colors
+     ================================ */
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-destructive: var(--destructive);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* ================================
+     Sidebar
+     ================================ */
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* ================================
+     GLOBAL Tailwind color bridge
+     This allows existing JSX colors
+     to respond to theme changes.
+     ================================ */
+
+  --color-slate-950: var(--slate-950);
+  --color-slate-900: var(--slate-900);
+  --color-slate-800: var(--slate-800);
+  --color-slate-700: var(--slate-700);
+  --color-slate-600: var(--slate-600);
+  --color-slate-500: var(--slate-500);
+  --color-slate-400: var(--slate-400);
+  --color-slate-300: var(--slate-300);
+  --color-slate-200: var(--slate-200);
+  --color-slate-100: var(--slate-100);
+
+  --color-white: var(--theme-white);
+  --color-black: var(--theme-black);
+
+  /* Radius */
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+
+/* =========================================================
+   DARK THEME
+   ========================================================= */
+
+:root {
+  /* Main */
+
+  --background: oklch(0.10 0.025 265);
+  --foreground: oklch(0.97 0.01 265);
+
+  --card: oklch(0.14 0.025 265);
+  --card-foreground: oklch(0.97 0.01 265);
+
+  --popover: oklch(0.14 0.025 265);
+  --popover-foreground: oklch(0.97 0.01 265);
+
+  /* SciBrain Indigo */
+
+  --primary: oklch(0.58 0.22 275);
+  --primary-foreground: oklch(0.99 0 0);
+
+  --secondary: oklch(0.20 0.025 265);
+  --secondary-foreground: oklch(0.92 0.01 265);
+
+  --muted: oklch(0.18 0.02 265);
+  --muted-foreground: oklch(0.65 0.025 265);
+
+  --accent: oklch(0.20 0.035 275);
+  --accent-foreground: oklch(0.95 0.01 265);
+
+  --destructive: oklch(0.63 0.22 25);
+
+  --border: oklch(0.24 0.025 265);
+  --input: oklch(0.22 0.025 265);
+  --ring: oklch(0.58 0.22 275);
+
+  /* Charts */
+
+  --chart-1: oklch(0.58 0.22 275);
+  --chart-2: oklch(0.65 0.18 300);
+  --chart-3: oklch(0.70 0.15 195);
+  --chart-4: oklch(0.65 0.18 145);
+  --chart-5: oklch(0.70 0.18 60);
+
+  --radius: 0.75rem;
+
+  /* Sidebar */
+
+  --sidebar: oklch(0.08 0.025 265);
+  --sidebar-foreground: oklch(0.92 0.01 265);
+  --sidebar-primary: oklch(0.58 0.22 275);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.17 0.03 275);
+  --sidebar-accent-foreground: oklch(0.95 0.01 265);
+  --sidebar-border: oklch(0.20 0.025 265);
+  --sidebar-ring: oklch(0.58 0.22 275);
+
+
+  /* =======================================================
+     Existing Tailwind colors used throughout SciBrain
+     ======================================================= */
+
+  --slate-950: oklch(0.08 0.025 265);
+  --slate-900: oklch(0.12 0.025 265);
+  --slate-800: oklch(0.17 0.025 265);
+  --slate-700: oklch(0.25 0.025 265);
+  --slate-600: oklch(0.40 0.025 265);
+  --slate-500: oklch(0.55 0.025 265);
+  --slate-400: oklch(0.68 0.025 265);
+  --slate-300: oklch(0.78 0.015 265);
+  --slate-200: oklch(0.88 0.01 265);
+  --slate-100: oklch(0.94 0.005 265);
+
+  --theme-white: oklch(0.99 0 0);
+  --theme-black: oklch(0.05 0 0);
+}
+
+
+/* =========================================================
+   LIGHT THEME
+   ========================================================= */
+
+[data-theme="light"] {
+
+  --background: oklch(0.975 0.006 265);
+  --foreground: oklch(0.18 0.02 265);
+
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.02 265);
+
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.02 265);
+
+  /* Keep SciBrain indigo */
+
+  --primary: oklch(0.58 0.22 275);
+  --primary-foreground: oklch(0.99 0 0);
+
+  --secondary: oklch(0.94 0.012 265);
+  --secondary-foreground: oklch(0.22 0.02 265);
+
+  --muted: oklch(0.94 0.012 265);
+  --muted-foreground: oklch(0.48 0.025 265);
+
+  --accent: oklch(0.94 0.025 275);
+  --accent-foreground: oklch(0.22 0.02 265);
+
+  --destructive: oklch(0.58 0.22 25);
+
+  --border: oklch(0.87 0.015 265);
+  --input: oklch(0.90 0.015 265);
+  --ring: oklch(0.58 0.22 275);
+
+  /* Sidebar */
+
+  --sidebar: oklch(0.985 0.006 265);
+  --sidebar-foreground: oklch(0.20 0.02 265);
+  --sidebar-primary: oklch(0.58 0.22 275);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.93 0.025 275);
+  --sidebar-accent-foreground: oklch(0.22 0.02 265);
+  --sidebar-border: oklch(0.87 0.015 265);
+  --sidebar-ring: oklch(0.58 0.22 275);
+
+
+  /* =======================================================
+     Light versions of existing Tailwind classes
+     ======================================================= */
+
+  --slate-950: oklch(0.985 0.004 265);
+  --slate-900: oklch(0.965 0.006 265);
+  --slate-800: oklch(0.91 0.01 265);
+  --slate-700: oklch(0.78 0.015 265);
+  --slate-600: oklch(0.60 0.02 265);
+  --slate-500: oklch(0.48 0.025 265);
+  --slate-400: oklch(0.40 0.025 265);
+  --slate-300: oklch(0.30 0.02 265);
+  --slate-200: oklch(0.22 0.02 265);
+  --slate-100: oklch(0.16 0.02 265);
+
+  --theme-white: oklch(0.12 0.02 265);
+  --theme-black: oklch(0.98 0 0);
+}
+
+
+/* =========================================================
+   GLOBAL BASE
+   ========================================================= */
+
+@layer base {
+
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    @apply font-sans;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+
+    transition:
+      background-color 0.25s ease,
+      color 0.25s ease;
+  }
+}
+
+
+/* =========================================================
+   Smooth theme transition
+   ========================================================= */
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+* {
+  transition-property:
+    background-color,
+    border-color,
+    color,
+    fill,
+    stroke;
+  transition-duration: 180ms;
+  transition-timing-function: ease;
 }

@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-
+import { ThemeProvider } from "./context/ThemeContext";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -7,6 +7,7 @@ import Dashboard from "./pages/Dashboard";
 import Papers from "./pages/Papers";
 import PaperDetails from "./pages/PaperDetails";
 import Settings from "./pages/Settings";
+import ResearchNotebook from "./pages/ResearchNotebook";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminLayout from "./components/AdminLayout";
 import AppLayout from "./components/AppLayout";
@@ -44,6 +45,7 @@ function AdminRoute({ children }) {
 
 function App() {
   return (
+    <ThemeProvider>
     <BrowserRouter>
 
       <div className="min-h-screen bg-background text-foreground">
@@ -100,6 +102,11 @@ function App() {
           />
 
           <Route
+             path="/research-notebook"
+            element={<ResearchNotebook />}
+          />
+          
+          <Route
             path="/settings"
             element={
               <ProtectedRoute>
@@ -136,6 +143,7 @@ function App() {
       </div>
 
     </BrowserRouter>
+    </ThemeProvider>
   );
 }
 

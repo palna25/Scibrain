@@ -1,5 +1,6 @@
 
 import { useEffect, useState } from "react";
+import { useTheme } from "../context/ThemeContext";
 import {
   User,
   Mail,
@@ -10,6 +11,7 @@ import {
 } from "lucide-react";
 
 function Settings() {
+  const { theme, setTheme } = useTheme();
   const [user, setUser] = useState({
     full_name: "",
     email: "",
@@ -279,7 +281,82 @@ function Settings() {
 
         </div>
 
+        {/* Appearance */}
+<div className="mt-6 rounded-2xl border border-white/[0.07] bg-slate-900/40 p-7 shadow-xl shadow-black/10 backdrop-blur-xl">
 
+  <div className="border-b border-white/[0.06] pb-5">
+    <h2 className="text-sm font-semibold text-white">
+      Appearance
+    </h2>
+
+    <p className="mt-1 text-xs text-slate-600">
+      Choose how SciBrain looks across your workspace.
+    </p>
+  </div>
+
+  <div className="mt-6 flex flex-col gap-4 sm:flex-row">
+
+    {/* Dark */}
+    <button
+      type="button"
+      onClick={() => setTheme("dark")}
+      className={`flex flex-1 items-center justify-between rounded-xl border p-4 text-left transition ${
+        theme === "dark"
+          ? "border-indigo-400/30 bg-indigo-500/[0.08]"
+          : "border-white/[0.06] bg-slate-950/40 hover:bg-slate-950/60"
+      }`}
+    >
+      <div>
+        <p className="text-sm font-medium text-slate-200">
+          Dark
+        </p>
+
+        <p className="mt-1 text-xs text-slate-500">
+          Dark workspace appearance
+        </p>
+      </div>
+
+      <div
+        className={`h-4 w-4 rounded-full border ${
+          theme === "dark"
+            ? "border-indigo-400 bg-indigo-400"
+            : "border-slate-600"
+        }`}
+      />
+    </button>
+
+
+    {/* Light */}
+    <button
+      type="button"
+      onClick={() => setTheme("light")}
+      className={`flex flex-1 items-center justify-between rounded-xl border p-4 text-left transition ${
+        theme === "light"
+          ? "border-indigo-400/30 bg-indigo-500/[0.08]"
+          : "border-white/[0.06] bg-slate-950/40 hover:bg-slate-950/60"
+      }`}
+    >
+      <div>
+        <p className="text-sm font-medium text-slate-200">
+          Light
+        </p>
+
+        <p className="mt-1 text-xs text-slate-500">
+          Light workspace appearance
+        </p>
+      </div>
+
+      <div
+        className={`h-4 w-4 rounded-full border ${
+          theme === "light"
+            ? "border-indigo-400 bg-indigo-400"
+            : "border-slate-600"
+        }`}
+      />
+    </button>
+
+  </div>
+</div>
         {/* Workspace information */}
         <div className="mt-6 grid gap-6 md:grid-cols-2">
 

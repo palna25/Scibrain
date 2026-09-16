@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   FileText,
   Network,
+  NotebookPen,
   GitBranch,
   Lightbulb,
   Settings,
@@ -22,6 +23,11 @@ const navigation = [
     name: "Papers",
     path: "/papers",
     icon: FileText,
+  },
+  {
+    name: "Research Notebook",
+    path: "/research-notebook",
+    icon: NotebookPen,
   },
   {
     name: "Knowledge Graph",
