@@ -9,6 +9,7 @@ from bson import ObjectId
 
 from app.database.mongodb import papers_collection
 from app.services.analysis import analyze_paper
+from app.services.vector_store import index_paper_chunks
 
 router = APIRouter(
     prefix="/api/papers",
@@ -134,6 +135,16 @@ async def upload_paper(file: UploadFile = File(...)):
         papers_collection.insert_one(
             paper_document
         )
+
+        # Index vectors into Qdrant
+        try:
+            index_paper_chunks(
+                paper_id=paper_id,
+                title=paper_document["title"],
+                text=extracted_text,
+            )
+        except Exception as vec_err:
+            print(f"Warning: Vector indexing for paper {paper_id} encountered: {vec_err}")
 
     except Exception as error:
 

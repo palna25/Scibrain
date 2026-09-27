@@ -1,62 +1,61 @@
-
 services:
-  # --- PostgreSQL ---
+  # --- PostgreSQL Database ---
   postgres:
     image: postgres:16
-    container_name: postgres_db
+    container_name: scibrain_postgres
     restart: always
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:-scibrain}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-scibrain_password}
+      POSTGRES_DB: ${POSTGRES_DB:-scibrain}
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - scibrain_postgres_data:/var/lib/postgresql/data
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"
+          "pg_isready -U ${POSTGRES_USER:-scibrain} -d ${POSTGRES_DB:-scibrain}"
         ]
-      interval: 10s
+      interval: 5s
       timeout: 5s
       retries: 5
-  # --- MongoDB ---
+
+  # --- MongoDB Database ---
   mongodb:
     image: mongo:latest
-    container_name: mongo_db
+    container_name: scibrain_mongodb
     restart: always
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME:-scibrain}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-scibrain_password}
     ports:
       - "27017:27017"
     volumes:
-      - mongo_data:/data/db
-
+      - scibrain_mongo_data:/data/db
     healthcheck:
       test:
         [
           "CMD-SHELL",
           "mongosh --quiet --eval \"db.adminCommand('ping').ok\""
         ]
-      interval: 10s
+      interval: 5s
       timeout: 5s
       retries: 5
 
   # --- Qdrant Vector DB ---
   qdrant:
     image: qdrant/qdrant:latest
-    container_name: qdrant_db
+    container_name: scibrain_qdrant
     restart: always
     ports:
       - "6333:6333"
       - "6334:6334"
     volumes:
-      - qdrant_storage:/qdrant/storage
-  
-   # --- FastAPI Backend ---
+      - scibrain_qdrant_storage:/qdrant/storage
+
+  # --- FastAPI Backend ---
   backend:
     build:
       context: ./backend
@@ -67,6 +66,8 @@ services:
       - ./backend/.env
     ports:
       - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -75,13 +76,10 @@ services:
       qdrant:
         condition: service_started
     volumes:
+      - ./backend:/app
       - ./backend/uploads:/app/uploads
 
 volumes:
-  postgres_data:
-    driver: local
-  mongo_data:
-    driver: local
-  qdrant_storage:
-    driver: local
-  
+  scibrain_postgres_data:
+  scibrain_mongo_data:
+  scibrain_qdrant_storage:
