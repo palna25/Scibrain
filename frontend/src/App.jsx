@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "./context/ThemeContext";
+import { ResearchProvider } from "./context/ResearchContext";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -8,6 +9,8 @@ import Papers from "./pages/Papers";
 import PaperDetails from "./pages/PaperDetails";
 import Settings from "./pages/Settings";
 import ResearchNotebook from "./pages/ResearchNotebook";
+import KnowledgeGraph from "./pages/KnowledgeGraph";
+import ResearchGaps from "./pages/ResearchGaps";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminLayout from "./components/AdminLayout";
 import AppLayout from "./components/AppLayout";
@@ -46,6 +49,7 @@ function AdminRoute({ children }) {
 function App() {
   return (
     <ThemeProvider>
+       <ResearchProvider>
     <BrowserRouter>
 
       <div className="min-h-screen bg-background text-foreground">
@@ -105,7 +109,23 @@ function App() {
              path="/research-notebook"
             element={<ResearchNotebook />}
           />
-          
+          <Route
+            path="/knowledge-graph"
+            element={
+              <ProtectedRoute>
+              <KnowledgeGraph />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+          path="/research-gaps"
+          element={
+            <ProtectedRoute>
+              <ResearchGaps />
+            </ProtectedRoute>
+          }
+        />
           <Route
             path="/settings"
             element={
@@ -143,6 +163,7 @@ function App() {
       </div>
 
     </BrowserRouter>
+    </ResearchProvider>
     </ThemeProvider>
   );
 }

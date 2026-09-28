@@ -4,7 +4,7 @@ from sqlalchemy import text
 from app.database.postgres import engine
 from app.routes.auth import router as auth_router
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import papers, admin
+from app.routes import papers, admin, notebook, knowledge_graph, research_gaps
 
 app = FastAPI(
     title="SciBrain API",
@@ -25,6 +25,9 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(papers.router)
 app.include_router(admin.router)
+app.include_router(notebook.router)
+app.include_router(knowledge_graph.router)
+app.include_router(research_gaps.router)
 
 @app.get("/")
 def root():

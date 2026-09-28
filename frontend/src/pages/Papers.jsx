@@ -28,6 +28,7 @@ function Papers() {
   const [loadingPapers, setLoadingPapers] = useState(true);
 
   const [error, setError] = useState("");
+
   // --------------------------------------------------
   // Load papers from FastAPI
   // --------------------------------------------------
@@ -51,7 +52,9 @@ function Papers() {
         filename: paper.filename || "",
         pageCount: paper.page_count || 0,
         textLength: paper.text_length || 0,
-        status: paper.status || "uploaded",
+        indexedChunks: paper.indexed_chunks || 0,
+        status: paper.status || "processing",
+        processingError: paper.processing_error || null,
         uploadedAt: paper.uploaded_at || null,
       }));
 
@@ -134,34 +137,39 @@ function Papers() {
 
       const token = localStorage.getItem("scibrain_token");
 
-      const response = await fetch(`${API_URL}/api/papers/upload`, {
-        method: "POST",
-        headers: token
-          ? {
-              Authorization: `Bearer ${token}`,
-            }
-          : {},
-        body: formData,
-      });
+      const response = await fetch(
+        `${API_URL}/api/papers/upload`,
+        {
+          method: "POST",
+          headers: token
+            ? {
+                Authorization: `Bearer ${token}`,
+              }
+            : {},
+          body: formData,
+        }
+      );
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.detail || "Failed to upload paper.");
+        throw new Error(
+          data.detail || "Failed to upload paper."
+        );
       }
 
-      // Clear selected file
       setSelectedFile(null);
 
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
 
-      // Reload papers from backend
       await fetchPapers();
     } catch (error) {
       console.error("Upload failed:", error);
-      setError(error.message || "Failed to upload paper.");
+      setError(
+        error.message || "Failed to upload paper."
+      );
     } finally {
       setUploading(false);
     }
@@ -179,32 +187,100 @@ function Papers() {
       fileInputRef.current.value = "";
     }
   };
+  // --------------------------------------------------
+// Delete Paper
+// --------------------------------------------------
 
+const handleDeletePaper = async (paper) => {
+  const confirmed = window.confirm(
+    `Delete "${paper.title || paper.filename}"?\n\n` +
+      "This will permanently remove the paper, its PDF, " +
+      "and its indexed research data."
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    setError("");
+
+    const token = localStorage.getItem(
+      "scibrain_token"
+    );
+
+    const response = await fetch(
+      `${API_URL}/api/papers/${paper.id}`,
+      {
+        method: "DELETE",
+
+        headers: token
+          ? {
+              Authorization: `Bearer ${token}`,
+            }
+          : {},
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.detail ||
+          "Failed to delete paper."
+      );
+    }
+
+    // Remove the deleted paper from the UI
+    setPapers((currentPapers) =>
+      currentPapers.filter(
+        (item) => item.id !== paper.id
+      )
+    );
+
+  } catch (error) {
+
+    console.error(
+      "Delete paper failed:",
+      error
+    );
+
+    setError(
+      error.message ||
+        "Failed to delete paper."
+    );
+  }
+};
   // --------------------------------------------------
   // Search
   // --------------------------------------------------
 
   const filteredPapers = papers.filter((paper) => {
-    const searchText = `${paper.title} ${paper.filename}`.toLowerCase();
+    const searchText =
+      `${paper.title} ${paper.filename}`.toLowerCase();
 
-    return searchText.includes(searchQuery.toLowerCase());
+    return searchText.includes(
+      searchQuery.toLowerCase()
+    );
   });
 
   // --------------------------------------------------
   // Statistics
   // --------------------------------------------------
 
-  const processedCount = papers.filter(
-    (paper) => paper.status.toLowerCase() === "processed"
+  const readyCount = papers.filter(
+    (paper) => paper.status.toLowerCase() === "ready"
   ).length;
 
-  const uploadedCount = papers.filter(
-    (paper) => paper.status.toLowerCase() === "uploaded"
+  const processingCount = papers.filter(
+    (paper) =>
+      paper.status.toLowerCase() === "processing"
   ).length;
 
   return (
     <AppLayout>
       {/* Page Header */}
+
       <div className="mb-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -217,14 +293,16 @@ function Papers() {
             </h1>
 
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-              Upload and manage academic papers to build your
-              research intelligence workspace.
+              Upload and manage academic papers that can
+              be used as evidence in your research workspace.
             </p>
           </div>
 
           <button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() =>
+              fileInputRef.current?.click()
+            }
             className="flex items-center justify-center gap-2 rounded-xl bg-indigo-500 px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-indigo-500/20 transition hover:bg-indigo-400"
           >
             <Upload className="h-4 w-4" />
@@ -234,30 +312,32 @@ function Papers() {
       </div>
 
       {/* Statistics */}
+
       <div className="grid gap-4 md:grid-cols-3">
         <InfoCard
           icon={FileText}
           label="Total Papers"
           value={papers.length}
-          description="Papers in workspace"
+          description="Research resources"
         />
 
         <InfoCard
           icon={CheckCircle2}
-          label="Processed"
-          value={processedCount}
-          description="Ready for analysis"
+          label="Ready"
+          value={readyCount}
+          description="Available for research"
         />
 
         <InfoCard
           icon={Clock3}
-          label="Uploaded"
-          value={uploadedCount}
-          description="Waiting for analysis"
+          label="Processing"
+          value={processingCount}
+          description="Being indexed"
         />
       </div>
 
       {/* Upload Section */}
+
       <section className="mt-6 overflow-hidden rounded-2xl border border-white/[0.07] bg-slate-900/50">
         <div className="border-b border-white/[0.06] px-6 py-5">
           <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-indigo-400">
@@ -280,9 +360,13 @@ function Papers() {
                 e.preventDefault();
                 setIsDragging(true);
               }}
-              onDragLeave={() => setIsDragging(false)}
+              onDragLeave={() =>
+                setIsDragging(false)
+              }
               onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() =>
+                fileInputRef.current?.click()
+              }
               className={`group flex min-h-[230px] cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed px-6 text-center transition ${
                 isDragging
                   ? "border-indigo-400 bg-indigo-500/[0.08]"
@@ -334,6 +418,7 @@ function Papers() {
       </section>
 
       {/* Papers Section */}
+
       <section className="mt-6 rounded-2xl border border-white/[0.07] bg-slate-900/50">
         <div className="flex flex-col gap-4 border-b border-white/[0.06] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -353,7 +438,9 @@ function Papers() {
               <input
                 type="text"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) =>
+                  setSearchQuery(e.target.value)
+                }
                 placeholder="Search papers..."
                 className="h-9 w-full rounded-xl border border-white/[0.07] bg-slate-950/70 pl-9 pr-3 text-xs text-slate-200 outline-none transition placeholder:text-slate-600 focus:border-indigo-400/20 focus:ring-1 focus:ring-indigo-400/10"
               />
@@ -369,7 +456,11 @@ function Papers() {
           ) : (
             <div className="space-y-3">
               {filteredPapers.map((paper) => (
-                <PaperItem key={paper.id} paper={paper} />
+                <PaperItem
+                  key={paper.id}
+                  paper={paper}
+                  onDelete={handleDeletePaper}
+                />
               ))}
             </div>
           )}
@@ -378,6 +469,7 @@ function Papers() {
     </AppLayout>
   );
 }
+
 
 // --------------------------------------------------
 // Information Card
@@ -417,6 +509,7 @@ function InfoCard({
     </div>
   );
 }
+
 
 // --------------------------------------------------
 // Selected File
@@ -476,7 +569,7 @@ function SelectedFile({
           {uploading ? (
             <>
               <Clock3 className="h-4 w-4 animate-spin" />
-              Processing...
+              Indexing...
             </>
           ) : (
             <>
@@ -490,30 +583,35 @@ function SelectedFile({
   );
 }
 
+
 // --------------------------------------------------
 // Paper Item
 // --------------------------------------------------
 
-function PaperItem({ paper }) {
+function PaperItem({ paper, onDelete }) {
   const navigate = useNavigate();
 
-  const isProcessed =
-    paper.status?.toLowerCase() === "processed";
+  const status = paper.status?.toLowerCase();
+
+  const isReady = status === "ready";
+  const isProcessing = status === "processing";
+  const isError = status === "error";
 
   const uploadedDate = paper.uploadedAt
-    ? new Date(paper.uploadedAt).toLocaleDateString(
-        "en-IN",
-        {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        }
-      )
+    ? new Date(
+        paper.uploadedAt
+      ).toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
     : "Unknown";
 
   return (
     <div
-      onClick={() => navigate(`/papers/${paper.id}`)}
+      onClick={() =>
+        navigate(`/papers/${paper.id}`)
+      }
       className="group flex cursor-pointer items-center gap-4 rounded-xl border border-white/[0.06] bg-slate-950/50 px-4 py-4 transition hover:border-indigo-400/20 hover:bg-slate-950/80"
     >
       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-indigo-400/10 bg-indigo-500/[0.06]">
@@ -530,7 +628,9 @@ function PaperItem({ paper }) {
             <>
               <span>
                 {paper.pageCount}{" "}
-                {paper.pageCount === 1 ? "page" : "pages"}
+                {paper.pageCount === 1
+                  ? "page"
+                  : "pages"}
               </span>
 
               <span className="h-1 w-1 rounded-full bg-slate-700" />
@@ -541,6 +641,16 @@ function PaperItem({ paper }) {
             {formatTextLength(paper.textLength)}
           </span>
 
+          {paper.indexedChunks > 0 && (
+            <>
+              <span className="h-1 w-1 rounded-full bg-slate-700" />
+
+              <span>
+                {paper.indexedChunks} chunks
+              </span>
+            </>
+          )}
+
           <span className="h-1 w-1 rounded-full bg-slate-700" />
 
           <span>
@@ -550,34 +660,46 @@ function PaperItem({ paper }) {
       </div>
 
       <div className="hidden items-center gap-2 sm:flex">
-        {isProcessed ? (
+        {isReady && (
           <span className="flex items-center gap-1.5 rounded-full border border-emerald-400/10 bg-emerald-400/[0.05] px-2.5 py-1 text-[10px] text-emerald-300">
             <CheckCircle2 className="h-3 w-3" />
-            Processed
+            Ready
           </span>
-        ) : (
+        )}
+
+        {isProcessing && (
           <span className="flex items-center gap-1.5 rounded-full border border-amber-400/10 bg-amber-400/[0.05] px-2.5 py-1 text-[10px] text-amber-300">
             <Clock3 className="h-3 w-3" />
-            Uploaded
+            Indexing
+          </span>
+        )}
+
+        {isError && (
+          <span className="flex items-center gap-1.5 rounded-full border border-red-400/10 bg-red-400/[0.05] px-2.5 py-1 text-[10px] text-red-300">
+            <AlertCircle className="h-3 w-3" />
+            Error
           </span>
         )}
       </div>
 
       <button
-        type="button"
-        disabled
-        onClick={(e) => e.stopPropagation()}
-        className="flex h-8 w-8 shrink-0 cursor-not-allowed items-center justify-center rounded-lg text-slate-800"
-        title="Delete will be added later"
-      >
-        <Trash2 className="h-4 w-4" />
-      </button>
+  type="button"
+  onClick={(e) => {
+    e.stopPropagation();
+    onDelete(paper);
+  }}
+  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-600 transition hover:bg-red-400/[0.08] hover:text-red-300"
+  title="Delete paper"
+  aria-label="Delete paper"
+>
+  <Trash2 className="h-4 w-4" />
+</button>
 
       <button
         type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-        }}
+        onClick={(e) =>
+          e.stopPropagation()
+        }
         className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-700 transition hover:bg-white/[0.04] hover:text-slate-300 sm:flex"
         title="More options"
       >
@@ -586,6 +708,7 @@ function PaperItem({ paper }) {
     </div>
   );
 }
+
 
 // --------------------------------------------------
 // Loading
@@ -602,6 +725,7 @@ function LoadingPapers() {
     </div>
   );
 }
+
 
 // --------------------------------------------------
 // Empty State
@@ -621,13 +745,15 @@ function EmptyPapers() {
       </h3>
 
       <p className="mx-auto mt-2 max-w-sm text-xs leading-5 text-slate-500">
-        Upload your first academic paper to begin building
-        your research library and uncovering meaningful
-        connections.
+        Upload your first academic paper to build
+        your research library and use it as evidence
+        in Research Notebook, Knowledge Graph, and
+        Research Gaps.
       </p>
     </div>
   );
 }
+
 
 // --------------------------------------------------
 // Helpers
@@ -636,23 +762,35 @@ function EmptyPapers() {
 function formatFileSize(bytes) {
   if (!bytes) return "0 Bytes";
 
-  const units = ["Bytes", "KB", "MB", "GB"];
+  const units = [
+    "Bytes",
+    "KB",
+    "MB",
+    "GB",
+  ];
 
   const index = Math.min(
-    Math.floor(Math.log(bytes) / Math.log(1024)),
+    Math.floor(
+      Math.log(bytes) / Math.log(1024)
+    ),
     units.length - 1
   );
 
-  return `${(bytes / Math.pow(1024, index)).toFixed(1)} ${
-    units[index]
-  }`;
+  return `${(
+    bytes /
+    Math.pow(1024, index)
+  ).toFixed(1)} ${units[index]}`;
 }
 
 function formatTextLength(length) {
-  if (!length) return "No extracted text";
+  if (!length) {
+    return "No extracted text";
+  }
 
   if (length >= 1000) {
-    return `${(length / 1000).toFixed(1)}k characters`;
+    return `${(
+      length / 1000
+    ).toFixed(1)}k characters`;
   }
 
   return `${length} characters`;

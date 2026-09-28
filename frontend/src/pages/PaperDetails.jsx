@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   AlertCircle,
   BookOpen,
+  Database,
 } from "lucide-react";
 
 import AppLayout from "../components/AppLayout";
@@ -41,10 +42,14 @@ function PaperDetails() {
 
         setPaper(data);
       } catch (error) {
-        console.error("Failed to load paper:", error);
+        console.error(
+          "Failed to load paper:",
+          error
+        );
 
         setError(
-          error.message || "Failed to load paper."
+          error.message ||
+            "Failed to load paper."
         );
       } finally {
         setLoading(false);
@@ -54,10 +59,10 @@ function PaperDetails() {
     fetchPaper();
   }, [paperId]);
 
-  /*
-   * IMPORTANT:
-   * This hook must remain BEFORE all early returns.
-   */
+  // --------------------------------------------------
+  // Format extracted text
+  // --------------------------------------------------
+
   const formattedSections = useMemo(() => {
     if (!paper?.text) {
       return [];
@@ -67,21 +72,26 @@ function PaperDetails() {
   }, [paper?.text]);
 
   const uploadedDate = paper?.uploaded_at
-    ? new Date(paper.uploaded_at).toLocaleDateString(
-        "en-IN",
-        {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        }
-      )
+    ? new Date(
+        paper.uploaded_at
+      ).toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
     : "Unknown";
 
-  const isProcessed =
-    paper?.status?.toLowerCase() === "processed" ||
-    paper?.status?.toLowerCase() === "analyzed";
+  const status =
+    paper?.status?.toLowerCase();
 
-  /* ================= LOADING ================= */
+  const isReady = status === "ready";
+  const isProcessing =
+    status === "processing";
+  const isError = status === "error";
+
+  // --------------------------------------------------
+  // Loading
+  // --------------------------------------------------
 
   if (loading) {
     return (
@@ -97,7 +107,9 @@ function PaperDetails() {
     );
   }
 
-  /* ================= ERROR ================= */
+  // --------------------------------------------------
+  // Error
+  // --------------------------------------------------
 
   if (error) {
     return (
@@ -114,7 +126,9 @@ function PaperDetails() {
           </p>
 
           <button
-            onClick={() => navigate("/papers")}
+            onClick={() =>
+              navigate("/papers")
+            }
             className="mt-6 rounded-xl bg-indigo-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-400"
           >
             Back to Papers
@@ -130,21 +144,23 @@ function PaperDetails() {
 
   return (
     <AppLayout>
-      {/* ================= BACK ================= */}
+      {/* Back */}
 
       <button
-        onClick={() => navigate("/papers")}
+        onClick={() =>
+          navigate("/papers")
+        }
         className="mb-6 flex items-center gap-2 text-sm text-slate-500 transition hover:text-slate-200"
       >
         <ArrowLeft className="h-4 w-4" />
         Back to Papers
       </button>
 
-      {/* ================= HEADER ================= */}
+      {/* Header */}
 
       <div className="mb-8">
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.25em] text-indigo-400">
-          Research Paper
+          Research Resource
         </p>
 
         <div className="flex items-start gap-4">
@@ -154,7 +170,8 @@ function PaperDetails() {
 
           <div className="min-w-0">
             <h1 className="text-3xl font-semibold tracking-tight text-white">
-              {paper.title || paper.filename}
+              {paper.title ||
+                paper.filename}
             </h1>
 
             <p className="mt-2 text-sm text-slate-500">
@@ -164,9 +181,9 @@ function PaperDetails() {
         </div>
       </div>
 
-      {/* ================= METADATA ================= */}
+      {/* Metadata */}
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <InfoCard
           label="Pages"
           value={paper.page_count || 0}
@@ -174,39 +191,86 @@ function PaperDetails() {
 
         <InfoCard
           label="Extracted Text"
-          value={formatTextLength(paper.text_length)}
+          value={formatTextLength(
+            paper.text_length
+          )}
         />
 
-        <div className="rounded-2xl border border-white/[0.07] bg-slate-900/50 p-5">
-          <p className="text-xs text-slate-500">
-            Status
-          </p>
+        <InfoCard
+          label="Indexed Chunks"
+          value={paper.indexed_chunks || 0}
+          icon={Database}
+        />
 
-          <div className="mt-3">
-            {isProcessed ? (
-              <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/10 bg-emerald-400/[0.05] px-3 py-1.5 text-xs text-emerald-300">
-                <CheckCircle2 className="h-4 w-4" />
-                Processed
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-2 rounded-full border border-amber-400/10 bg-amber-400/[0.05] px-3 py-1.5 text-xs text-amber-300">
-                <Clock3 className="h-4 w-4" />
-                Uploaded
-              </span>
-            )}
-          </div>
-
-          <p className="mt-3 text-xs text-slate-600">
-            Uploaded {uploadedDate}
-          </p>
-        </div>
+        <StatusCard
+          status={status}
+          uploadedDate={uploadedDate}
+          isReady={isReady}
+          isProcessing={isProcessing}
+          isError={isError}
+        />
       </div>
 
-      {/* ================= PAPER TEXT ================= */}
+      {/* Research readiness */}
+
+      {isReady && (
+        <div className="mt-6 flex items-start gap-3 rounded-2xl border border-emerald-400/10 bg-emerald-400/[0.04] px-5 py-4">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" />
+
+          <div>
+            <p className="text-sm font-medium text-emerald-300">
+              Ready for research
+            </p>
+
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              This resource has been extracted,
+              chunked, embedded, and indexed in
+              Qdrant. It can now be selected in
+              Research Notebook, Knowledge Graph,
+              and Research Gaps.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {isProcessing && (
+        <div className="mt-6 flex items-start gap-3 rounded-2xl border border-amber-400/10 bg-amber-400/[0.04] px-5 py-4">
+          <Clock3 className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+
+          <div>
+            <p className="text-sm font-medium text-amber-300">
+              Indexing resource
+            </p>
+
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              The paper text has been extracted and
+              is currently being prepared for semantic
+              search.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {isError && (
+        <div className="mt-6 flex items-start gap-3 rounded-2xl border border-red-400/10 bg-red-400/[0.04] px-5 py-4">
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-400" />
+
+          <div>
+            <p className="text-sm font-medium text-red-300">
+              Resource indexing failed
+            </p>
+
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              {paper.processing_error ||
+                "An error occurred while preparing this paper for research."}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Paper Text */}
 
       <section className="mt-6 overflow-hidden rounded-2xl border border-white/[0.07] bg-slate-900/50">
-        {/* Section header */}
-
         <div className="border-b border-white/[0.06] px-6 py-5">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-indigo-400/10 bg-indigo-500/[0.06]">
@@ -225,40 +289,48 @@ function PaperDetails() {
           </div>
 
           <p className="mt-3 text-xs leading-5 text-slate-500">
-            Structured text extracted from the uploaded research paper.
+            Text extracted from the original
+            research paper. The content is stored
+            as a research resource and retrieved
+            contextually when you ask questions.
           </p>
         </div>
-
-        {/* Text */}
 
         <div className="max-h-[750px] overflow-y-auto">
           {formattedSections.length > 0 ? (
             <div className="divide-y divide-white/[0.05]">
-              {formattedSections.map((section, index) => (
-                <article
-                  key={`${section.title}-${index}`}
-                  className="px-6 py-7"
-                >
-                  {section.title ? (
-                    <h3 className="mb-4 text-lg font-semibold tracking-tight text-white">
-                      {section.title}
-                    </h3>
-                  ) : null}
+              {formattedSections.map(
+                (section, index) => (
+                  <article
+                    key={`${section.title}-${index}`}
+                    className="px-6 py-7"
+                  >
+                    {section.title ? (
+                      <h3 className="mb-4 text-lg font-semibold tracking-tight text-white">
+                        {section.title}
+                      </h3>
+                    ) : null}
 
-                  <div className="space-y-4">
-                    {section.paragraphs.map(
-                      (paragraph, paragraphIndex) => (
-                        <p
-                          key={paragraphIndex}
-                          className="text-sm leading-7 text-slate-400"
-                        >
-                          {paragraph}
-                        </p>
-                      )
-                    )}
-                  </div>
-                </article>
-              ))}
+                    <div className="space-y-4">
+                      {section.paragraphs.map(
+                        (
+                          paragraph,
+                          paragraphIndex
+                        ) => (
+                          <p
+                            key={
+                              paragraphIndex
+                            }
+                            className="text-sm leading-7 text-slate-400"
+                          >
+                            {paragraph}
+                          </p>
+                        )
+                      )}
+                    </div>
+                  </article>
+                )
+              )}
             </div>
           ) : (
             <div className="flex min-h-[250px] items-center justify-center px-6 text-center">
@@ -266,7 +338,8 @@ function PaperDetails() {
                 <FileText className="mx-auto h-8 w-8 text-slate-700" />
 
                 <p className="mt-4 text-sm text-slate-600">
-                  No text could be extracted from this paper.
+                  No text could be extracted
+                  from this paper.
                 </p>
               </div>
             </div>
@@ -277,18 +350,100 @@ function PaperDetails() {
   );
 }
 
-/* =========================================================
-   FORMAT PAPER TEXT
-   ========================================================= */
+
+// =========================================================
+// STATUS CARD
+// =========================================================
+
+function StatusCard({
+  status,
+  uploadedDate,
+  isReady,
+  isProcessing,
+  isError,
+}) {
+  return (
+    <div className="rounded-2xl border border-white/[0.07] bg-slate-900/50 p-5">
+      <p className="text-xs text-slate-500">
+        Status
+      </p>
+
+      <div className="mt-3">
+        {isReady && (
+          <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/10 bg-emerald-400/[0.05] px-3 py-1.5 text-xs text-emerald-300">
+            <CheckCircle2 className="h-4 w-4" />
+            Ready
+          </span>
+        )}
+
+        {isProcessing && (
+          <span className="inline-flex items-center gap-2 rounded-full border border-amber-400/10 bg-amber-400/[0.05] px-3 py-1.5 text-xs text-amber-300">
+            <Clock3 className="h-4 w-4" />
+            Indexing
+          </span>
+        )}
+
+        {isError && (
+          <span className="inline-flex items-center gap-2 rounded-full border border-red-400/10 bg-red-400/[0.05] px-3 py-1.5 text-xs text-red-300">
+            <AlertCircle className="h-4 w-4" />
+            Error
+          </span>
+        )}
+
+        {!isReady &&
+          !isProcessing &&
+          !isError && (
+            <span className="text-xs text-slate-400">
+              {status || "Unknown"}
+            </span>
+          )}
+      </div>
+
+      <p className="mt-3 text-xs text-slate-600">
+        Uploaded {uploadedDate}
+      </p>
+    </div>
+  );
+}
+
+
+// =========================================================
+// INFO CARD
+// =========================================================
+
+function InfoCard({
+  label,
+  value,
+  icon: Icon,
+}) {
+  return (
+    <div className="rounded-2xl border border-white/[0.07] bg-slate-900/50 p-5">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-slate-500">
+          {label}
+        </p>
+
+        {Icon && (
+          <Icon className="h-4 w-4 text-indigo-400" />
+        )}
+      </div>
+
+      <p className="mt-3 text-2xl font-semibold text-white">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+
+// =========================================================
+// FORMAT PAPER TEXT
+// =========================================================
 
 function formatPaperText(text) {
   if (!text || typeof text !== "string") {
     return [];
   }
-
-  /*
-   * Normalize PDF extraction artifacts.
-   */
 
   let cleaned = text
     .replace(/\r\n/g, "\n")
@@ -300,15 +455,6 @@ function formatPaperText(text) {
   if (!cleaned) {
     return [];
   }
-
-  /*
-   * Common academic-paper section headings.
-   *
-   * We only format headings that are actually present
-   * in the extracted text.
-   *
-   * We are NOT inventing content.
-   */
 
   const headingPattern =
     /^(abstract|introduction|background|related work|literature review|methodology|methods|materials and methods|proposed method|proposed methodology|experimental setup|experiments|results|discussion|results and discussion|conclusion|conclusions|limitations|future work|references|acknowledgments|acknowledgements)$/i;
@@ -332,10 +478,13 @@ function formatPaperText(text) {
       return;
     }
 
-    const paragraph = paragraphBuffer.join(" ").trim();
+    const paragraph =
+      paragraphBuffer.join(" ").trim();
 
     if (paragraph) {
-      currentSection.paragraphs.push(paragraph);
+      currentSection.paragraphs.push(
+        paragraph
+      );
     }
 
     paragraphBuffer = [];
@@ -362,25 +511,18 @@ function formatPaperText(text) {
       .replace(/^[0-9]+[.)]\s*/, "")
       .trim();
 
-    /*
-     * Detect actual section headings.
-     */
-
-    if (headingPattern.test(normalizedLine)) {
+    if (
+      headingPattern.test(
+        normalizedLine
+      )
+    ) {
       flushSection();
 
-      currentSection.title = normalizedLine;
+      currentSection.title =
+        normalizedLine;
 
       return;
     }
-
-    /*
-     * Detect numbered headings such as:
-     *
-     * 1 Introduction
-     * 2. Methodology
-     * 3 Results
-     */
 
     const numberedHeading =
       normalizedLine.match(
@@ -393,55 +535,58 @@ function formatPaperText(text) {
 
       if (
         possibleTitle.length < 60 &&
-        !/[.!?]$/.test(possibleTitle)
+        !/[.!?]$/.test(
+          possibleTitle
+        )
       ) {
         flushSection();
 
-        currentSection.title = possibleTitle;
+        currentSection.title =
+          possibleTitle;
 
         return;
       }
     }
 
-    /*
-     * If the PDF extractor already separated paragraphs,
-     * preserve those paragraph boundaries.
-     */
-
     if (paragraphBuffer.length > 0) {
       const previousLine =
-        paragraphBuffer[paragraphBuffer.length - 1];
-
-      /*
-       * A new line beginning with a capitalized sentence
-       * after a reasonably long line is usually a new
-       * extracted paragraph.
-       */
+        paragraphBuffer[
+          paragraphBuffer.length - 1
+        ];
 
       if (
         previousLine.length > 120 &&
-        /^[A-Z]/.test(normalizedLine)
+        /^[A-Z]/.test(
+          normalizedLine
+        )
       ) {
         flushParagraph();
       }
     }
 
-    paragraphBuffer.push(normalizedLine);
+    paragraphBuffer.push(
+      normalizedLine
+    );
   });
 
   flushSection();
 
-  /*
-   * If the PDF had no recognizable headings, still display
-   * readable paragraphs rather than one giant text block.
-   */
-
-  if (sections.length === 1 && !sections[0].title) {
-    const fullText = sections[0].paragraphs.join(" ");
+  if (
+    sections.length === 1 &&
+    !sections[0].title
+  ) {
+    const fullText =
+      sections[0].paragraphs.join(
+        " "
+      );
 
     const paragraphs = fullText
-      .split(/(?<=[.!?])\s+(?=[A-Z])/)
-      .map((paragraph) => paragraph.trim())
+      .split(
+        /(?<=[.!?])\s+(?=[A-Z])/
+      )
+      .map((paragraph) =>
+        paragraph.trim()
+      )
       .filter(Boolean);
 
     return [
@@ -458,27 +603,10 @@ function formatPaperText(text) {
   return sections;
 }
 
-/* =========================================================
-   INFO CARD
-   ========================================================= */
 
-function InfoCard({ label, value }) {
-  return (
-    <div className="rounded-2xl border border-white/[0.07] bg-slate-900/50 p-5">
-      <p className="text-xs text-slate-500">
-        {label}
-      </p>
-
-      <p className="mt-3 text-2xl font-semibold text-white">
-        {value}
-      </p>
-    </div>
-  );
-}
-
-/* =========================================================
-   TEXT LENGTH
-   ========================================================= */
+// =========================================================
+// TEXT LENGTH
+// =========================================================
 
 function formatTextLength(length) {
   if (!length) {
@@ -486,7 +614,9 @@ function formatTextLength(length) {
   }
 
   if (length >= 1000) {
-    return `${(length / 1000).toFixed(1)}k`;
+    return `${(
+      length / 1000
+    ).toFixed(1)}k`;
   }
 
   return `${length} characters`;
