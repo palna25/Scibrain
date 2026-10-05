@@ -1,6 +1,7 @@
 import { Bell, Search, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import PaperSearch from "./PaperSearch";
 
 function Topbar() {
   const navigate = useNavigate();
@@ -35,13 +36,9 @@ function Topbar() {
     <header className="flex h-20 items-center justify-between border-b border-white/[0.06] px-8">
       {/* Search */}
       <div className="relative w-[360px]">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600" />
-
-        <input
-          type="text"
-          placeholder="Search research, papers, concepts..."
-          className="h-10 w-full rounded-xl border border-white/[0.07] bg-slate-900/60 pl-10 pr-4 text-sm text-slate-200 outline-none placeholder:text-slate-500 transition-all focus:border-indigo-400/20 focus:bg-slate-900/80 focus:ring-1 focus:ring-indigo-400/10"
-        />
+        <PaperSearch />
+      
+       
       </div>
 
       {/* Right side */}

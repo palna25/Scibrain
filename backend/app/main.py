@@ -5,7 +5,8 @@ from app.database.postgres import engine
 from app.routes.auth import router as auth_router
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes import papers, admin, notebook, knowledge_graph, research_gaps
-
+from app.routes import gemini_test
+from app.routes.sources import router as sources_router
 app = FastAPI(
     title="SciBrain API",
     description="Backend API for SciBrain Research Intelligence Platform",
@@ -28,6 +29,8 @@ app.include_router(admin.router)
 app.include_router(notebook.router)
 app.include_router(knowledge_graph.router)
 app.include_router(research_gaps.router)
+app.include_router(gemini_test.router)
+app.include_router(sources_router)
 
 @app.get("/")
 def root():

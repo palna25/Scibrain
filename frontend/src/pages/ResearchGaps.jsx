@@ -82,7 +82,7 @@ function ResearchGaps() {
   const selectedPapers = useMemo(
     () =>
       papers.filter((paper) =>
-        selectedResourceIds.includes(paper.id)
+        selectedResourceIds.includes(String(paper.id))
       ),
     [papers, selectedResourceIds]
   );
