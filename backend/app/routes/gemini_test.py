@@ -1,6 +1,10 @@
-from fastapi import APIRouter
 
-from app.services.gemini import call_gemini_json
+from fastapi import APIRouter, HTTPException
+
+from app.services.gemini import (
+    GeminiConfigurationError,
+    call_gemini_json,
+)
 
 
 router = APIRouter(
@@ -10,21 +14,15 @@ router = APIRouter(
 
 
 @router.get("")
-def test_gemini():
+def gemini_diagnostic():
     schema = {
         "type": "object",
         "properties": {
-            "topic": {
-                "type": "string",
-            },
-            "definition": {
-                "type": "string",
-            },
+            "topic": {"type": "string"},
+            "definition": {"type": "string"},
             "key_points": {
                 "type": "array",
-                "items": {
-                    "type": "string",
-                },
+                "items": {"type": "string"},
             },
         },
         "required": [
@@ -34,14 +32,19 @@ def test_gemini():
         ],
     }
 
-    response = call_gemini_json(
-        """
-        Explain Retrieval-Augmented Generation.
+    prompt = """
+    Explain Retrieval-Augmented Generation.
 
-        Return a concise definition and exactly three important
-        key points.
-        """,
-        schema,
-    )
+    Return a concise definition and exactly three important
+    key points.
+    """
+
+    try:
+        response = call_gemini_json(prompt, schema)
+    except GeminiConfigurationError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=str(exc),
+        ) from exc
 
     return response

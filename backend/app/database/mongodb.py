@@ -1,48 +1,96 @@
+
 import os
+from pathlib import Path
+from urllib.parse import quote_plus
 
-from pymongo import MongoClient, ASCENDING, DESCENDING
 from dotenv import load_dotenv
+from pymongo import ASCENDING, DESCENDING, MongoClient
 
-load_dotenv()
 
-MONGO_URL = os.getenv(
-    "MONGO_URL",
-    "mongodb://localhost:27017"
+# Load project configuration for local development.
+# In Docker, the variables are supplied by docker-compose.yml.
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+load_dotenv(PROJECT_ROOT / ".env", override=False)
+load_dotenv(PROJECT_ROOT / "backend" / ".env", override=False)
+
+
+def build_mongo_url() -> str:
+    # An explicitly configured connection string takes precedence.
+    configured_url = os.getenv("MONGO_URL")
+    if configured_url:
+        return configured_url
+
+    username = os.getenv("MONGO_USERNAME")
+    password = os.getenv("MONGO_PASSWORD")
+    host = os.getenv("MONGO_HOST", "localhost")
+    port = os.getenv("MONGO_PORT", "27017")
+
+    if username and password:
+        return (
+            f"mongodb://{quote_plus(username)}:{quote_plus(password)}"
+            f"@{host}:{port}/?authSource=admin"
+        )
+
+    raise RuntimeError(
+        "MongoDB credentials are missing. Configure MONGO_URL or both "
+        "MONGO_USERNAME and MONGO_PASSWORD in the project environment."
+    )
+
+
+MONGO_URL = build_mongo_url()
+
+client = MongoClient(
+    MONGO_URL,
+    serverSelectionTimeoutMS=5000,
 )
-
-client = MongoClient(MONGO_URL)
 
 db = client["scibrain"]
 
-# ------------------------------------------------------------
-# Existing paper collection
-# ------------------------------------------------------------
-
+# Paper collection
 papers_collection = db["papers"]
 
+# Persistent research notebooks
+notebooks_collection = db["notebooks"]
 
-# ------------------------------------------------------------
-# Notebook chat collection
-# ------------------------------------------------------------
-
+# Persistent notebook conversations
 notebook_chats_collection = db["notebook_chats"]
 
-
-# ------------------------------------------------------------
-# Indexes
-# ------------------------------------------------------------
-
-# Every chat_id must be unique.
-notebook_chats_collection.create_index(
-    [("chat_id", ASCENDING)],
-    unique=True
+# Notebook indexes
+notebooks_collection.create_index(
+    [("notebook_id", ASCENDING)],
+    unique=True,
 )
 
-# Makes it efficient to retrieve a user's chats
-# ordered by most recently updated.
+notebooks_collection.create_index(
+    [
+        ("user_id", ASCENDING),
+        ("updated_at", DESCENDING),
+    ]
+)
+
+notebooks_collection.create_index(
+    [
+        ("user_id", ASCENDING),
+        ("notebook_id", ASCENDING),
+    ]
+)
+
+# Notebook chat indexes
+notebook_chats_collection.create_index(
+    [("chat_id", ASCENDING)],
+    unique=True,
+)
+
+notebook_chats_collection.create_index(
+    [
+        ("notebook_id", ASCENDING),
+        ("updated_at", DESCENDING),
+    ]
+)
+
 notebook_chats_collection.create_index(
     [
         ("user_id", ASCENDING),
-        ("updated_at", DESCENDING)
+        ("updated_at", DESCENDING),
     ]
 )

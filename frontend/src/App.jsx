@@ -9,12 +9,14 @@ import Papers from "./pages/Papers";
 import PaperDetails from "./pages/PaperDetails";
 import Settings from "./pages/Settings";
 import ResearchNotebook from "./pages/ResearchNotebook";
+import ResearchNotebookWorkspace from "./pages/ResearchNotebookWorkspace";
 import KnowledgeGraph from "./pages/KnowledgeGraph";
 import ResearchGaps from "./pages/ResearchGaps";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminLayout from "./components/AdminLayout";
 import AppLayout from "./components/AppLayout";
-
+/* import AdminUsers from "./pages/admin/AdminUsers";
+ */
 
 function ProtectedRoute({ children }) {
   const token = localStorage.getItem("scibrain_token");
@@ -106,11 +108,41 @@ function App() {
           />
 
           <Route
-             path="/research-notebook"
-            element={<ResearchNotebook />}
-          />
+                path="/notebook"
+                element={
+                  <ProtectedRoute>
+                    <ResearchNotebook />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/notebook/:notebookId"
+                element={
+                  <ProtectedRoute>
+                    <ResearchNotebookWorkspace />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Keep old URL working */}
+              <Route
+                path="/research-notebook"
+                element={
+                  <Navigate
+                    to="/notebook"
+                    replace
+                  />
+                }
+              />
+                 <Route
+              path="/knowledge-graph"
+              element={<KnowledgeGraph />}
+            />
+
+
           <Route
-            path="/knowledge-graph"
+            path="/notebook/:notebookId/knowledge-graph"
             element={
               <ProtectedRoute>
               <KnowledgeGraph />
@@ -150,7 +182,8 @@ function App() {
             </AdminRoute>
           }
         />
-
+{/*         <Route path="/admin/users" element={<AdminUsers />} />
+ */}
           {/* ================= FALLBACK ================= */}
 
           <Route

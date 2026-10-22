@@ -1,20 +1,22 @@
+# routes/knowledge_graph.py
 from typing import List
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.services.knowledge_graph import generate_knowledge_graph
+# 🔴 REMOVE OR COMMENT OUT THIS FAULTY LINE:
+# from app.models.knowledge_graph import KNOWLEDGE_GRAPH_SCHEMA  
 
+# 🟢 KEEP ONLY THE ACTUAL SERVICE IMPLEMENTATION:
+from app.services.knowledge_graph import generate_knowledge_graph
 
 router = APIRouter(
     prefix="/api/knowledge-graph",
     tags=["Knowledge Graph"],
 )
 
-
 class KnowledgeGraphRequest(BaseModel):
     resource_ids: List[str]
-
 
 @router.post("")
 def create_knowledge_graph(

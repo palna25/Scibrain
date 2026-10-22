@@ -1,0 +1,932 @@
+{
+  "test": "SciBrain independent engine real-paper regression",
+  "model": "gemini-3.8-flash",
+  "collection": "scibrain_papers",
+  "input_coverage": [
+    {
+      "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+      "title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+      "indexed_chunks_found": 30,
+      "sampled_chunks": 6,
+      "chunk_indexes_sampled": [
+        0,
+        6,
+        12,
+        17,
+        23,
+        29
+      ]
+    },
+    {
+      "paper_id": "81670699-a813-424c-a4af-b8e51929238b",
+      "title": "RAGLAB: A Modular and Research-Oriented Unified Framework for Retrieval-Augmented Generation",
+      "indexed_chunks_found": 53,
+      "sampled_chunks": 6,
+      "chunk_indexes_sampled": [
+        0,
+        10,
+        21,
+        31,
+        42,
+        52
+      ]
+    }
+  ],
+  "graph": {
+    "nodes": [
+      {
+        "id": "node_e4b732e6019b800bc575",
+        "name": "personalized care",
+        "entity_type": "application",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-23",
+            "quote": "personalized care"
+          }
+        ]
+      },
+      {
+        "id": "node_1c932e5d0dd98be7cf72",
+        "name": "personalized learning experiences",
+        "entity_type": "application",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-23",
+            "quote": "personalized learning experiences"
+          }
+        ]
+      },
+      {
+        "id": "node_411f32f2afbaba69c73a",
+        "name": "generative components",
+        "entity_type": "architectural component",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-0",
+            "quote": "generative components"
+          }
+        ]
+      },
+      {
+        "id": "node_6cee0d498a4bb9c86287",
+        "name": "knowledge bases",
+        "entity_type": "architectural component",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-0",
+            "quote": "knowledge bases"
+          }
+        ]
+      },
+      {
+        "id": "node_b02a4c452c646124a41e",
+        "name": "retrieval components",
+        "entity_type": "architectural component",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-0",
+            "quote": "retrieval components"
+          }
+        ]
+      },
+      {
+        "id": "node_d3a6d5bd3bdd615762f2",
+        "name": "hallucinations",
+        "entity_type": "challenge",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "81670699-a813-424c-a4af-b8e51929238b",
+            "paper_title": "RAGLAB: A Modular and Research-Oriented Unified Framework for Retrieval-Augmented Generation",
+            "chunk_id": "81670699-a813-424c-a4af-b8e51929238b-chunk-0",
+            "quote": "hallucinations"
+          }
+        ]
+      },
+      {
+        "id": "node_5433943468150b2698db",
+        "name": "scalability",
+        "entity_type": "challenge",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-12",
+            "quote": "scalability"
+          },
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-17",
+            "quote": "scalability"
+          }
+        ]
+      },
+      {
+        "id": "node_9123dcbb0b42652b0e10",
+        "name": "generator",
+        "entity_type": "component",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "81670699-a813-424c-a4af-b8e51929238b",
+            "paper_title": "RAGLAB: A Modular and Research-Oriented Unified Framework for Retrieval-Augmented Generation",
+            "chunk_id": "81670699-a813-424c-a4af-b8e51929238b-chunk-10",
+            "quote": "The generator"
+          }
+        ]
+      },
+      {
+        "id": "node_a5086fd4911a8648547f",
+        "name": "latency challenge",
+        "entity_type": "computational challenge",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-17",
+            "quote": "latency challenge"
+          }
+        ]
+      },
+      {
+        "id": "node_763c6c61f4d64695b9e0",
+        "name": "dense vector representations",
+        "entity_type": "data representation",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-6",
+            "quote": "dense vector representations"
+          },
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-12",
+            "quote": "dense vector representations"
+          }
+        ]
+      },
+      {
+        "id": "node_b4d8643b81727fa0a3cd",
+        "name": "RAGLAB",
+        "entity_type": "framework",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "81670699-a813-424c-a4af-b8e51929238b",
+            "paper_title": "RAGLAB: A Modular and Research-Oriented Unified Framework for Retrieval-Augmented Generation",
+            "chunk_id": "81670699-a813-424c-a4af-b8e51929238b-chunk-10",
+            "quote": "RAGLAB"
+          }
+        ]
+      },
+      {
+        "id": "node_3e6d81a1a791c50d53f0",
+        "name": "Large Language Models",
+        "entity_type": "model",
+        "aliases": [
+          "LLMs"
+        ],
+        "evidence": [
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-0",
+            "quote": "Large Language Models (LLMs)"
+          },
+          {
+            "paper_id": "81670699-a813-424c-a4af-b8e51929238b",
+            "paper_title": "RAGLAB: A Modular and Research-Oriented Unified Framework for Retrieval-Augmented Generation",
+            "chunk_id": "81670699-a813-424c-a4af-b8e51929238b-chunk-0",
+            "quote": "Large Language Models (LLMs)"
+          }
+        ]
+      },
+      {
+        "id": "node_994562fd49cb47ad9f0f",
+        "name": "retrieval efficiency",
+        "entity_type": "performance metric",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-17",
+            "quote": "retrieval efficiency"
+          }
+        ]
+      },
+      {
+        "id": "node_8c754a45bf167bd15fd5",
+        "name": "curse of dimensionality",
+        "entity_type": "phenomenon",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-12",
+            "quote": "curse of dimensionality"
+          }
+        ]
+      },
+      {
+        "id": "node_db6bd288ab762e535bb9",
+        "name": "distance concentration",
+        "entity_type": "phenomenon",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-12",
+            "quote": "distance concentration"
+          }
+        ]
+      },
+      {
+        "id": "node_dc453b2d95200c3c9caa",
+        "name": "Natural Language Processing",
+        "entity_type": "research field",
+        "aliases": [
+          "NLP"
+        ],
+        "evidence": [
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-0",
+            "quote": "Natural Language Processing (NLP)"
+          }
+        ]
+      },
+      {
+        "id": "node_8a58fa29ba2f09b8bc15",
+        "name": "GAO",
+        "entity_type": "researcher",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-6",
+            "quote": "GAO"
+          }
+        ]
+      },
+      {
+        "id": "node_96d237d8a21cf8d661e6",
+        "name": "Karpukhin et al.",
+        "entity_type": "researcher",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-6",
+            "quote": "Karpukhin et al."
+          }
+        ]
+      },
+      {
+        "id": "node_3f5b84d665eea53ae0c4",
+        "name": "lexical retrieval approaches",
+        "entity_type": "retrieval approach",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-6",
+            "quote": "lexical retrieval approaches"
+          }
+        ]
+      },
+      {
+        "id": "node_ca4126305d73c16b9f12",
+        "name": "dense retrieval methods",
+        "entity_type": "retrieval method",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-6",
+            "quote": "dense retrieval methods"
+          }
+        ]
+      },
+      {
+        "id": "node_8620de4e1717652ff2d6",
+        "name": "method combining sparse and dense retrieval techniques",
+        "entity_type": "retrieval method",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-6",
+            "quote": "method combining sparse and dense retrieval techniques"
+          }
+        ]
+      },
+      {
+        "id": "node_27ed99a9ba549f8ce5ef",
+        "name": "robot assistants",
+        "entity_type": "robotic system",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-23",
+            "quote": "robot assistants"
+          }
+        ]
+      },
+      {
+        "id": "node_7a443f582b98baacaeb7",
+        "name": "exact nearest neighbor search",
+        "entity_type": "search method",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-12",
+            "quote": "exact nearest neighbor search"
+          }
+        ]
+      },
+      {
+        "id": "node_4ca866056a9895d6520e",
+        "name": "Huggingface Transformers",
+        "entity_type": "software library",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "81670699-a813-424c-a4af-b8e51929238b",
+            "paper_title": "RAGLAB: A Modular and Research-Oriented Unified Framework for Retrieval-Augmented Generation",
+            "chunk_id": "81670699-a813-424c-a4af-b8e51929238b-chunk-10",
+            "quote": "Huggingface Transform-\ners"
+          }
+        ]
+      },
+      {
+        "id": "node_ec8207a3dde607f7867f",
+        "name": "VLLM",
+        "entity_type": "software library",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "81670699-a813-424c-a4af-b8e51929238b",
+            "paper_title": "RAGLAB: A Modular and Research-Oriented Unified Framework for Retrieval-Augmented Generation",
+            "chunk_id": "81670699-a813-424c-a4af-b8e51929238b-chunk-10",
+            "quote": "VLLM"
+          }
+        ]
+      },
+      {
+        "id": "node_569f9e019d7742c00105",
+        "name": "RAG system",
+        "entity_type": "system",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "81670699-a813-424c-a4af-b8e51929238b",
+            "paper_title": "RAGLAB: A Modular and Research-Oriented Unified Framework for Retrieval-Augmented Generation",
+            "chunk_id": "81670699-a813-424c-a4af-b8e51929238b-chunk-10",
+            "quote": "RAG\nsystem"
+          }
+        ]
+      },
+      {
+        "id": "node_aa6cc546b2f67f070e2f",
+        "name": "RAG systems",
+        "entity_type": "system",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-17",
+            "quote": "RAG systems"
+          },
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-23",
+            "quote": "RAG systems"
+          }
+        ]
+      },
+      {
+        "id": "node_a302ab12a03d12a228ff",
+        "name": "real-time knowledge base updates",
+        "entity_type": "system process",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-17",
+            "quote": "real-time knowledge base updates"
+          }
+        ]
+      },
+      {
+        "id": "node_fa0e0e4ed02518a9d327",
+        "name": "modern retrieval systems",
+        "entity_type": "system type",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-12",
+            "quote": "modern retrieval systems"
+          }
+        ]
+      },
+      {
+        "id": "node_172f4168d76ad04cae2e",
+        "name": "dynamic external knowledge retrieval",
+        "entity_type": "technique",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+            "paper_title": "A Research of Challenges and Solutions in Retrieval Augmented Generation (RAG) Systems",
+            "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-0",
+            "quote": "dynamic external knowledge retrieval"
+          }
+        ]
+      },
+      {
+        "id": "node_4d710f155d01d0190dc7",
+        "name": "Low-Rank Adaptation",
+        "entity_type": "technique",
+        "aliases": [
+          "LoRA"
+        ],
+        "evidence": [
+          {
+            "paper_id": "81670699-a813-424c-a4af-b8e51929238b",
+            "paper_title": "RAGLAB: A Modular and Research-Oriented Unified Framework for Retrieval-Augmented Generation",
+            "chunk_id": "81670699-a813-424c-a4af-b8e51929238b-chunk-10",
+            "quote": "Low-Rank Adaptation (LoRA)"
+          }
+        ]
+      },
+      {
+        "id": "node_00337646bb399b2abd58",
+        "name": "quantization",
+        "entity_type": "technique",
+        "aliases": [],
+        "evidence": [
+          {
+            "paper_id": "81670699-a813-424c-a4af-b8e51929238b",
+            "paper_title": "RAGLAB: A Modular and Research-Oriented Unified Framework for Retrieval-Augmented Generation",
+            "chunk_id": "81670699-a813-424c-a4af-b8e51929238b-chunk-10",
+            "quote": "quantiza-\ntion"
+          }
+        ]
+      },
+      {
+        "id": "node_031abfa15d712ae66a3c",
+        "name": "Retrieval Augmented Generation",
+        "entity_type": "technique",
+        "aliases": [
+          "RAG"
+        ],
+        "evidence": [
+          {
+            "paper_id": "81670699-a813-424c-a4af-b8e51929238b",
+            "paper_title": "RAGLAB: A Modular and Research-Oriented Unified Framework for Retrieval-Augmented Generation",
+            "chunk_id": "81670699-a813-424c-a4af-b8e51929238b-chunk-0",
+            "quote": "Retrieval Augmented Generation (RAG)"
+          }
+        ]
+      }
+    ],
+    "edges": [],
+    "statistics": {
+      "input_papers": 2,
+      "input_chunks": 12,
+      "entity_candidates": 39,
+      "relationship_candidates": 23,
+      "accepted_entities": 33,
+      "accepted_relationships": 0,
+      "isolated_nodes": 33,
+      "rejected_entities_by_reason": {
+        "entity_not_identifiable_in_quote": 1,
+        "quote_not_in_source": 1
+      },
+      "rejected_relationships_by_reason": {
+        "unresolved_or_ambiguous_source": 5,
+        "semantic_verification_failed": 14,
+        "source_not_in_evidence": 2,
+        "quote_not_in_source": 2
+      },
+      "cross_paper_edges": 0,
+      "multi_paper_supported_edges": 0,
+      "extraction_failures": [
+        {
+          "chunk_id": "81670699-a813-424c-a4af-b8e51929238b-chunk-21",
+          "paper_id": "81670699-a813-424c-a4af-b8e51929238b",
+          "error": "RuntimeError: Gemini request failed after bounded retries: ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.8-flash\\nPlease retry in 3h22m50.758481537s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type'"
+        },
+        {
+          "chunk_id": "81670699-a813-424c-a4af-b8e51929238b-chunk-31",
+          "paper_id": "81670699-a813-424c-a4af-b8e51929238b",
+          "error": "RuntimeError: Gemini request failed after bounded retries: ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.8-flash\\nPlease retry in 3h22m46.782907321s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type'"
+        },
+        {
+          "chunk_id": "81670699-a813-424c-a4af-b8e51929238b-chunk-42",
+          "paper_id": "81670699-a813-424c-a4af-b8e51929238b",
+          "error": "RuntimeError: Gemini request failed after bounded retries: ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.8-flash\\nPlease retry in 3h22m42.807399454s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type'"
+        },
+        {
+          "chunk_id": "81670699-a813-424c-a4af-b8e51929238b-chunk-52",
+          "paper_id": "81670699-a813-424c-a4af-b8e51929238b",
+          "error": "RuntimeError: Gemini request failed after bounded retries: ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.8-flash\\nPlease retry in 3h22m38.841537849s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type'"
+        }
+      ],
+      "verification_failures": [
+        {
+          "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-6",
+          "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+          "candidate_count": "2",
+          "error": "RuntimeError: Gemini request failed after bounded retries: ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.8-flash\\nPlease retry in 3h22m34.828090793s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type'"
+        },
+        {
+          "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-12",
+          "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+          "candidate_count": "2",
+          "error": "RuntimeError: Gemini request failed after bounded retries: ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.8-flash\\nPlease retry in 3h22m30.852251926s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type'"
+        },
+        {
+          "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-17",
+          "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+          "candidate_count": "3",
+          "error": "RuntimeError: Gemini request failed after bounded retries: ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.8-flash\\nPlease retry in 3h22m26.804201847s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type'"
+        },
+        {
+          "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-23",
+          "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77",
+          "candidate_count": "2",
+          "error": "RuntimeError: Gemini request failed after bounded retries: ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.8-flash\\nPlease retry in 3h22m22.855806132s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type'"
+        },
+        {
+          "chunk_id": "81670699-a813-424c-a4af-b8e51929238b-chunk-10",
+          "paper_id": "81670699-a813-424c-a4af-b8e51929238b",
+          "candidate_count": "5",
+          "error": "RuntimeError: Gemini request failed after bounded retries: ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.8-flash\\nPlease retry in 3h22m18.877427347s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type'"
+        }
+      ],
+      "verification_requests": 5,
+      "verified_relationship_candidates": 14
+    },
+    "rejected_candidates": [
+      {
+        "stage": "entity",
+        "reason": "entity_not_identifiable_in_quote",
+        "detail": "Retrieval-Augmented Generation systems",
+        "candidate_name": "Retrieval-Augmented Generation systems",
+        "entity_type": "system",
+        "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-0",
+        "quote": "Retrieval-Augmented Generation (RAG) systems",
+        "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77"
+      },
+      {
+        "stage": "entity",
+        "reason": "quote_not_in_source",
+        "detail": "RAG-powered robotic tutors",
+        "candidate_name": "RAG-powered robotic tutors",
+        "entity_type": "robotic system",
+        "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-23",
+        "quote": "RAG-powered robotic tutors",
+        "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77"
+      },
+      {
+        "stage": "relationship",
+        "reason": "unresolved_or_ambiguous_source",
+        "detail": "Retrieval-Augmented Generation systems -[integrates]-> Large Language Models",
+        "source": "Retrieval-Augmented Generation systems",
+        "source_type": "system",
+        "relation": "integrates",
+        "target": "Large Language Models",
+        "target_type": "model",
+        "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-0",
+        "quote": "Retrieval-Augmented Generation (RAG) systems represent a significant innovation in the field of Natural Language Processing (NLP), ingeniously integrating Large Language Models (LLMs) with dynamic external knowledge retrieval.",
+        "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77"
+      },
+      {
+        "stage": "relationship",
+        "reason": "unresolved_or_ambiguous_source",
+        "detail": "Retrieval-Augmented Generation systems -[integrates]-> dynamic external knowledge retrieval",
+        "source": "Retrieval-Augmented Generation systems",
+        "source_type": "system",
+        "relation": "integrates",
+        "target": "dynamic external knowledge retrieval",
+        "target_type": "technique",
+        "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-0",
+        "quote": "Retrieval-Augmented Generation (RAG) systems represent a significant innovation in the field of Natural Language Processing (NLP), ingeniously integrating Large Language Models (LLMs) with dynamic external knowledge retrieval.",
+        "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77"
+      },
+      {
+        "stage": "relationship",
+        "reason": "unresolved_or_ambiguous_source",
+        "detail": "Retrieval-Augmented Generation systems -[encompassing]-> retrieval components",
+        "source": "Retrieval-Augmented Generation systems",
+        "source_type": "system",
+        "relation": "encompassing",
+        "target": "retrieval components",
+        "target_type": "architectural component",
+        "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-0",
+        "quote": "It delves into the central architecture of RAG systems, encompassing retrieval components, generative components, and knowledge bases, with a particular",
+        "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77"
+      },
+      {
+        "stage": "relationship",
+        "reason": "unresolved_or_ambiguous_source",
+        "detail": "Retrieval-Augmented Generation systems -[encompassing]-> generative components",
+        "source": "Retrieval-Augmented Generation systems",
+        "source_type": "system",
+        "relation": "encompassing",
+        "target": "generative components",
+        "target_type": "architectural component",
+        "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-0",
+        "quote": "It delves into the central architecture of RAG systems, encompassing retrieval components, generative components, and knowledge bases, with a particular",
+        "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77"
+      },
+      {
+        "stage": "relationship",
+        "reason": "unresolved_or_ambiguous_source",
+        "detail": "Retrieval-Augmented Generation systems -[encompassing]-> knowledge bases",
+        "source": "Retrieval-Augmented Generation systems",
+        "source_type": "system",
+        "relation": "encompassing",
+        "target": "knowledge bases",
+        "target_type": "architectural component",
+        "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-0",
+        "quote": "It delves into the central architecture of RAG systems, encompassing retrieval components, generative components, and knowledge bases, with a particular",
+        "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77"
+      },
+      {
+        "stage": "relationship",
+        "reason": "semantic_verification_failed",
+        "detail": "verification_request_failed: RuntimeError: Gemini request failed after bounded retries: ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_request",
+        "source": "Karpukhin et al.",
+        "source_type": "researcher",
+        "relation": "proposed",
+        "target": "dense retrieval methods",
+        "target_type": "retrieval method",
+        "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-6",
+        "quote": "Recent advancements in dense retrieval methods, such as those proposed by Karpukhin et al., have significantly improved the effectiveness of this component [4].",
+        "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77"
+      },
+      {
+        "stage": "relationship",
+        "reason": "source_not_in_evidence",
+        "detail": "dense retrieval methods -[leverage]-> dense vector representations",
+        "source": "dense retrieval methods",
+        "source_type": "retrieval method",
+        "relation": "leverage",
+        "target": "dense vector representations",
+        "target_type": "data representation",
+        "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-6",
+        "quote": "These methods leverage dense vector representations of both queries and documents, enabling more nuanced semantic matching compared to traditional lexical retrieval approaches.",
+        "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77"
+      },
+      {
+        "stage": "relationship",
+        "reason": "semantic_verification_failed",
+        "detail": "verification_request_failed: RuntimeError: Gemini request failed after bounded retries: ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_request",
+        "source": "GAO",
+        "source_type": "researcher",
+        "relation": "proposed",
+        "target": "method combining sparse and dense retrieval techniques",
+        "target_type": "retrieval method",
+        "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-6",
+        "quote": "For instance, GAO proposed a method combining sparse and dense retrieval techniques [5].",
+        "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77"
+      },
+      {
+        "stage": "relationship",
+        "reason": "semantic_verification_failed",
+        "detail": "verification_request_failed: RuntimeError: Gemini request failed after bounded retries: ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_request",
+        "source": "scalability",
+        "source_type": "challenge",
+        "relation": "lies in",
+        "target": "curse of dimensionality",
+        "target_type": "phenomenon",
+        "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-12",
+        "quote": "The fundamental challenge of scalability lies in the curse of dimensionality.",
+        "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77"
+      },
+      {
+        "stage": "relationship",
+        "reason": "semantic_verification_failed",
+        "detail": "verification_request_failed: RuntimeError: Gemini request failed after bounded retries: ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_request",
+        "source": "dense vector representations",
+        "source_type": "representation",
+        "relation": "used in",
+        "target": "modern retrieval systems",
+        "target_type": "system type",
+        "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-12",
+        "quote": "This is particularly problematic for dense vector representations used in modern retrieval systems.",
+        "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77"
+      },
+      {
+        "stage": "relationship",
+        "reason": "semantic_verification_failed",
+        "detail": "verification_request_failed: RuntimeError: Gemini request failed after bounded retries: ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_request",
+        "source": "real-time knowledge base updates",
+        "source_type": "system process",
+        "relation": "further exacerbates",
+        "target": "latency challenge",
+        "target_type": "computational challenge",
+        "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-17",
+        "quote": "The latency challenge is further exacerbated in scenarios requiring real-time knowledge base updates.",
+        "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77"
+      },
+      {
+        "stage": "relationship",
+        "reason": "semantic_verification_failed",
+        "detail": "verification_request_failed: RuntimeError: Gemini request failed after bounded retries: ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_request",
+        "source": "RAG systems",
+        "source_type": "system",
+        "relation": "witnessed advancements addressing key challenges in",
+        "target": "retrieval efficiency",
+        "target_type": "performance metric",
+        "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-17",
+        "quote": "Recent years have witnessed significant advancements in RAG systems, addressing key challenges in retrieval efficiency, scalability, and",
+        "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77"
+      },
+      {
+        "stage": "relationship",
+        "reason": "semantic_verification_failed",
+        "detail": "verification_request_failed: RuntimeError: Gemini request failed after bounded retries: ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_request",
+        "source": "RAG systems",
+        "source_type": "system",
+        "relation": "witnessed advancements addressing key challenges in",
+        "target": "scalability",
+        "target_type": "system property",
+        "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-17",
+        "quote": "Recent years have witnessed significant advancements in RAG systems, addressing key challenges in retrieval efficiency, scalability, and",
+        "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77"
+      },
+      {
+        "stage": "relationship",
+        "reason": "semantic_verification_failed",
+        "detail": "verification_request_failed: RuntimeError: Gemini request failed after bounded retries: ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_request",
+        "source": "robot assistants",
+        "source_type": "robotic system",
+        "relation": "equipped with",
+        "target": "RAG systems",
+        "target_type": "technology",
+        "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-23",
+        "quote": "In healthcare, robot assistants equipped with RAG systems could provide personalized care by combining real-time patient data with comprehensive medical knowledge.",
+        "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77"
+      },
+      {
+        "stage": "relationship",
+        "reason": "semantic_verification_failed",
+        "detail": "verification_request_failed: RuntimeError: Gemini request failed after bounded retries: ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_request",
+        "source": "robot assistants",
+        "source_type": "robotic system",
+        "relation": "could provide",
+        "target": "personalized care",
+        "target_type": "application",
+        "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-23",
+        "quote": "In healthcare, robot assistants equipped with RAG systems could provide personalized care by combining real-time patient data with comprehensive medical knowledge.",
+        "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77"
+      },
+      {
+        "stage": "relationship",
+        "reason": "quote_not_in_source",
+        "detail": "RAG-powered robotic tutors -[could offer]-> personalized learning experiences",
+        "source": "RAG-powered robotic tutors",
+        "source_type": "robotic system",
+        "relation": "could offer",
+        "target": "personalized learning experiences",
+        "target_type": "application",
+        "chunk_id": "646fc26c-04ed-406c-9669-15a6a75b3d77-chunk-23",
+        "quote": "Furthermore, in educational settings, RAG-powered robotic tutors could offer personalized learning experiences by dynamically retrieving and presenting information tailored to each student's needs and learning style.",
+        "paper_id": "646fc26c-04ed-406c-9669-15a6a75b3d77"
+      },
+      {
+        "stage": "relationship",
+        "reason": "source_not_in_evidence",
+        "detail": "Large Language Models -[face challenges such as]-> hallucinations",
+        "source": "Large Language Models",
+        "source_type": "model class",
+        "relation": "face challenges such as",
+        "target": "hallucinations",
+        "target_type": "challenge",
+        "chunk_id": "81670699-a813-424c-a4af-b8e51929238b-chunk-0",
+        "quote": "However, even the most advanced LLMs face challenges such as hallucinations and real-time updating of their knowledge.",
+        "paper_id": "81670699-a813-424c-a4af-b8e51929238b"
+      },
+      {
+        "stage": "relationship",
+        "reason": "quote_not_in_source",
+        "detail": "Retrieval Augmented Generation -[equips with external knowledge]-> Large Language Models",
+        "source": "Retrieval Augmented Generation",
+        "source_type": "technique",
+        "relation": "equips with external knowledge",
+        "target": "Large Language Models",
+        "target_type": "model class",
+        "chunk_id": "81670699-a813-424c-a4af-b8e51929238b-chunk-0",
+        "quote": "Current research addresses this bottleneck by equipping LLMs with ex- ternal knowledge, a technique known as Re- trieval Augmented Generation (RAG).",
+        "paper_id": "81670699-a813-424c-a4af-b8e51929238b"
+      },
+      {
+        "stage": "relationship",
+        "reason": "semantic_verification_failed",
+        "detail": "verification_request_failed: RuntimeError: Gemini request failed after bounded retries: ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_request",
+        "source": "generator",
+        "source_type": "component",
+        "relation": "is core component of",
+        "target": "RAG system",
+        "target_type": "system",
+        "chunk_id": "81670699-a813-424c-a4af-b8e51929238b-chunk-10",
+        "quote": "The generator is the core component of the RAG\nsystem.",
+        "paper_id": "81670699-a813-424c-a4af-b8e51929238b"
+      },
+      {
+        "stage": "relationship",
+        "reason": "semantic_verification_failed",
+        "detail": "verification_request_failed: RuntimeError: Gemini request failed after bounded retries: ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_request",
+        "source": "RAGLAB",
+        "source_type": "framework",
+        "relation": "integrates",
+        "target": "Huggingface Transformers",
+        "target_type": "software library",
+        "chunk_id": "81670699-a813-424c-a4af-b8e51929238b-chunk-10",
+        "quote": "We integrate Huggingface Transform-\ners(Wolf et al., 2020) and VLLM(Kwon et al.,\n2023), thereby enabling RAGLAB to be compat-\nible with a wide range of open-source models",
+        "paper_id": "81670699-a813-424c-a4af-b8e51929238b"
+      },
+      {
+        "stage": "relationship",
+        "reason": "semantic_verification_failed",
+        "detail": "verification_request_failed: RuntimeError: Gemini request failed after bounded retries: ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_request",
+        "source": "RAGLAB",
+        "source_type": "framework",
+        "relation": "integrates",
+        "target": "VLLM",
+        "target_type": "software library",
+        "chunk_id": "81670699-a813-424c-a4af-b8e51929238b-chunk-10",
+        "quote": "We integrate Huggingface Transform-\ners(Wolf et al., 2020) and VLLM(Kwon et al.,\n2023), thereby enabling RAGLAB to be compat-\nible with a wide range of open-source models",
+        "paper_id": "81670699-a813-424c-a4af-b8e51929238b"
+      },
+      {
+        "stage": "relationship",
+        "reason": "semantic_verification_failed",
+        "detail": "verification_request_failed: RuntimeError: Gemini request failed after bounded retries: ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_request",
+        "source": "RAGLAB",
+        "source_type": "framework",
+        "relation": "incorporates",
+        "target": "quantization",
+        "target_type": "technique",
+        "chunk_id": "81670699-a813-424c-a4af-b8e51929238b-chunk-10",
+        "quote": "RAGLAB also incorporates quantiza-\ntion and Low-Rank Adaptation (LoRA) (Hu et al.,\n2022) features",
+        "paper_id": "81670699-a813-424c-a4af-b8e51929238b"
+      },
+      {
+        "stage": "relationship",
+        "reason": "semantic_verification_failed",
+        "detail": "verification_request_failed: RuntimeError: Gemini request failed after bounded retries: ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_request",
+        "source": "RAGLAB",
+        "source_type": "framework",
+        "relation": "incorporates",
+        "target": "Low-Rank Adaptation",
+        "target_type": "technique",
+        "chunk_id": "81670699-a813-424c-a4af-b8e51929238b-chunk-10",
+        "quote": "RAGLAB also incorporates quantiza-\ntion and Low-Rank Adaptation (LoRA) (Hu et al.,\n2022) features",
+        "paper_id": "81670699-a813-424c-a4af-b8e51929238b"
+      }
+    ]
+  }
+}

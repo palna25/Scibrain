@@ -71,6 +71,12 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             detail="Invalid email or password."
         )
 
+    if not user.is_active:
+        raise HTTPException(
+            status_code=403,
+            detail="Your account has been deactivated. Contact an administrator."
+        )
+
     access_token = create_access_token(
         data={
             "sub": str(user.id),

@@ -42,11 +42,9 @@ function PaperSearch({ className = "" }) {
 
   const containerRef = useRef(null);
 
-  /*
-   * ============================================================
-   * CLOSE DROPDOWN WHEN CLICKING OUTSIDE
-   * ============================================================
-   */
+  // ============================================================
+  // CLOSE DROPDOWN WHEN CLICKING OUTSIDE
+  // ============================================================
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -68,21 +66,9 @@ function PaperSearch({ className = "" }) {
     };
   }, []);
 
-  /*
-   * ============================================================
-   * SEARCH
-   * ============================================================
-   *
-   * IMPORTANT:
-   *
-   * This function ONLY performs metadata search.
-   *
-   * It does NOT download PDFs.
-   * It does NOT call /api/sources/import.
-   *
-   * PDF downloading happens only after the researcher
-   * explicitly clicks Import.
-   */
+  // ============================================================
+  // SEARCH
+  // ============================================================
 
   const handleSearch = async (event) => {
     event?.preventDefault();
@@ -109,11 +95,9 @@ function PaperSearch({ className = "" }) {
     setSourceStatus({});
 
     try {
-      /*
-       * --------------------------------------------------------
-       * 1. SEARCH SCIBRAIN'S EXISTING PAPERS
-       * --------------------------------------------------------
-       */
+      // --------------------------------------------------------
+      // 1. SEARCH SCIBRAIN'S EXISTING PAPERS
+      // --------------------------------------------------------
 
       let papers = [];
 
@@ -129,8 +113,7 @@ function PaperSearch({ className = "" }) {
         );
 
         if (papersResponse.ok) {
-          const papersData =
-            await papersResponse.json();
+          const papersData = await papersResponse.json();
 
           papers = Array.isArray(papersData)
             ? papersData
@@ -139,10 +122,8 @@ function PaperSearch({ className = "" }) {
               [];
         }
       } catch (internalError) {
-        /*
-         * Internal search failure should not prevent
-         * external academic search from working.
-         */
+        // Internal search failure should not prevent
+        // external academic search from working.
 
         console.error(
           "SciBrain internal paper search failed:",
@@ -150,13 +131,10 @@ function PaperSearch({ className = "" }) {
         );
       }
 
-      /*
-       * Local topic matching against:
-       *
-       * title
-       * filename
-       * abstract
-       */
+      // Local topic matching against:
+      // title
+      // filename
+      // abstract
 
       const searchTokens = trimmedQuery
         .toLowerCase()
@@ -165,25 +143,16 @@ function PaperSearch({ className = "" }) {
 
       const matchedPapers = papers
         .map((paper) => {
-          const title = String(
-            paper.title || ""
-          );
-
-          const filename = String(
-            paper.filename || ""
-          );
-
-          const abstract = String(
-            paper.abstract || ""
-          );
+          const title = String(paper.title || "");
+          const filename = String(paper.filename || "");
+          const abstract = String(paper.abstract || "");
 
           const searchableText =
             `${title} ${filename} ${abstract}`.toLowerCase();
 
-          const matchedTokens =
-            searchTokens.filter((token) =>
-              searchableText.includes(token)
-            );
+          const matchedTokens = searchTokens.filter((token) =>
+            searchableText.includes(token)
+          );
 
           return {
             ...paper,
@@ -192,73 +161,52 @@ function PaperSearch({ className = "" }) {
               Math.max(searchTokens.length, 1),
           };
         })
-        .filter(
-          (paper) => paper._matchScore > 0
-        )
+        .filter((paper) => paper._matchScore > 0)
         .sort((a, b) => {
-          if (
-            b._matchScore !==
-            a._matchScore
-          ) {
-            return (
-              b._matchScore -
-              a._matchScore
-            );
+          if (b._matchScore !== a._matchScore) {
+            return b._matchScore - a._matchScore;
           }
 
-          return String(
-            a.title || ""
-          ).localeCompare(
+          return String(a.title || "").localeCompare(
             String(b.title || "")
           );
         })
         .slice(0, 5);
 
-      setInternalResults(
-        matchedPapers
-      );
+      setInternalResults(matchedPapers);
 
-      /*
-       * --------------------------------------------------------
-       * 2. SEARCH EXTERNAL ACADEMIC SOURCES
-       * --------------------------------------------------------
-       *
-       * POST /api/sources/search
-       *
-       * This endpoint returns metadata only.
-       *
-       * NO PDF DOWNLOAD OCCURS HERE.
-       */
+      // --------------------------------------------------------
+      // 2. SEARCH EXTERNAL ACADEMIC SOURCES
+      // --------------------------------------------------------
 
       console.log(
         "Searching external academic sources:",
         `${API_URL}/api/sources/search`
       );
 
-      const externalResponse =
-        await fetch(
-          `${API_URL}/api/sources/search`,
-          {
-            method: "POST",
+      const externalResponse = await fetch(
+        `${API_URL}/api/sources/search`,
+        {
+          method: "POST",
 
-            headers: {
-              ...getAuthHeaders(),
-              "Content-Type":
-                "application/json",
-            },
+          headers: {
+            ...getAuthHeaders(),
+            "Content-Type": "application/json",
+          },
 
-            body: JSON.stringify({
-              query: trimmedQuery,
+          body: JSON.stringify({
+            query: trimmedQuery,
 
-              sources: [
-                "semantic_scholar",
-                "crossref",
-              ],
+            sources: [
+              "semantic_scholar",
+              "crossref",
+              "openalex",
+            ],
 
-              limit: 10,
-            }),
-          }
-        );
+            limit: 50,
+          }),
+        }
+      );
 
       console.log(
         "External search response:",
@@ -268,8 +216,7 @@ function PaperSearch({ className = "" }) {
       let externalData = {};
 
       try {
-        externalData =
-          await externalResponse.json();
+        externalData = await externalResponse.json();
       } catch {
         externalData = {};
       }
@@ -279,9 +226,7 @@ function PaperSearch({ className = "" }) {
         externalData
       );
 
-      /*
-       * A genuine search failure is handled here.
-       */
+      // A genuine search failure is handled here.
 
       if (!externalResponse.ok) {
         throw new Error(
@@ -291,16 +236,26 @@ function PaperSearch({ className = "" }) {
         );
       }
 
-      /*
-       * Store results even if one source is
-       * rate-limited or unavailable.
-       */
+      // --------------------------------------------------------
+      // EXTERNAL RESULTS
+      // --------------------------------------------------------
 
-      const results = Array.isArray(
-        externalData?.results
-      )
+      const results = Array.isArray(externalData?.results)
         ? externalData.results
         : [];
+
+      /*
+       * The backend is responsible for determining whether a PDF
+       * is actually accessible.
+       *
+       * Expected fields:
+       *
+       * pdf_available: boolean
+       * pdf_status: string
+       * pdf_url: string | null
+       *
+       * We do not attempt to verify or download PDFs here.
+       */
 
       setExternalResults(results);
 
@@ -308,15 +263,11 @@ function PaperSearch({ className = "" }) {
         externalData?.source_status || {}
       );
 
-      /*
-       * Source-level problems are warnings,
-       * not complete search failures.
-       */
+      // Source-level problems are warnings,
+      // not complete search failures.
 
       if (
-        Array.isArray(
-          externalData?.errors
-        ) &&
+        Array.isArray(externalData?.errors) &&
         externalData.errors.length > 0
       ) {
         console.warn(
@@ -341,11 +292,11 @@ function PaperSearch({ className = "" }) {
     }
   };
 
+  // ============================================================
+  // IMPORT PAPER
+  // ============================================================
+
   /*
-   * ============================================================
-   * IMPORT PAPER
-   * ============================================================
-   *
    * IMPORTANT:
    *
    * This is the ONLY place where /api/sources/import
@@ -356,21 +307,43 @@ function PaperSearch({ className = "" }) {
    */
 
   const handleImport = async (paper) => {
-    const paperKey =
-      paper.id || paper.source_id;
+    const paperKey = paper.id || paper.source_id;
 
     if (!paperKey || importingId) {
       return;
     }
 
-    setImportingId(paperKey);
-
     /*
-     * Clear only the previous import error.
+     * Defensive check.
      *
-     * Do NOT clear search results.
+     * Even if the UI accidentally receives a paper with a URL,
+     * the explicit backend availability flag must be true before
+     * allowing import.
      */
 
+    if (paper.pdf_available !== true) {
+      setImportError({
+        paperId: paperKey,
+        message:
+          "This paper does not have a verified accessible PDF.",
+      });
+
+      return;
+    }
+
+    if (!paper.pdf_url) {
+      setImportError({
+        paperId: paperKey,
+        message:
+          "This paper does not have a verified PDF URL.",
+      });
+
+      return;
+    }
+
+    setImportingId(paperKey);
+
+    // Clear only the previous import error.
     setImportError(null);
 
     try {
@@ -380,7 +353,7 @@ function PaperSearch({ className = "" }) {
       );
 
       console.log(
-        "PDF URL:",
+        "Verified PDF URL:",
         paper.pdf_url
       );
 
@@ -391,45 +364,33 @@ function PaperSearch({ className = "" }) {
 
           headers: {
             ...getAuthHeaders(),
-            "Content-Type":
-              "application/json",
+            "Content-Type": "application/json",
           },
 
           body: JSON.stringify({
             title: paper.title,
 
-            pdf_url:
-              paper.pdf_url || null,
+            pdf_url: paper.pdf_url,
 
-            url:
-              paper.url || null,
+            url: paper.url || null,
 
-            doi:
-              paper.doi || null,
+            doi: paper.doi || null,
 
-            source:
-              paper.source || null,
+            source: paper.source || null,
 
-            source_id:
-              paper.source_id || null,
+            source_id: paper.source_id || null,
 
-            authors:
-              paper.authors || [],
+            authors: paper.authors || [],
 
-            year:
-              paper.year || null,
+            year: paper.year || null,
 
-            venue:
-              paper.venue || null,
+            venue: paper.venue || null,
 
-            abstract:
-              paper.abstract || null,
+            abstract: paper.abstract || null,
 
-            external_ids:
-              paper.external_ids || {},
+            external_ids: paper.external_ids || {},
 
-            id:
-              paper.id || null,
+            id: paper.id || null,
           }),
         }
       );
@@ -458,28 +419,21 @@ function PaperSearch({ className = "" }) {
       /*
        * Mark the paper as imported.
        *
-       * This also handles the backend's duplicate
-       * response where:
+       * This also handles the backend's duplicate response where:
        *
        * already_imported: true
        */
 
-      setExternalResults(
-        (current) =>
-          current.map((item) =>
-            (
-              item.id ||
-              item.source_id
-            ) === paperKey
-              ? {
-                  ...item,
-
-                  _imported: true,
-
-                  _importResult: data,
-                }
-              : item
-          )
+      setExternalResults((current) =>
+        current.map((item) =>
+          (item.id || item.source_id) === paperKey
+            ? {
+                ...item,
+                _imported: true,
+                _importResult: data,
+              }
+            : item
+        )
       );
 
       setImportError(null);
@@ -490,8 +444,6 @@ function PaperSearch({ className = "" }) {
       );
 
       /*
-       * IMPORTANT:
-       *
        * Do NOT put this in searchError.
        *
        * The search succeeded.
@@ -510,11 +462,9 @@ function PaperSearch({ className = "" }) {
     }
   };
 
-  /*
-   * ============================================================
-   * HELPERS
-   * ============================================================
-   */
+  // ============================================================
+  // HELPERS
+  // ============================================================
 
   const formatAuthors = (authors) => {
     if (
@@ -538,16 +488,11 @@ function PaperSearch({ className = "" }) {
 
     return `${names
       .slice(0, 2)
-      .join(", ")} +${
-      names.length - 2
-    }`;
+      .join(", ")} +${names.length - 2}`;
   };
 
   const getSourceLabel = (source) => {
-    if (
-      source ===
-      "semantic_scholar"
-    ) {
+    if (source === "semantic_scholar") {
       return "Semantic Scholar";
     }
 
@@ -556,6 +501,38 @@ function PaperSearch({ className = "" }) {
     }
 
     return source || "External";
+  };
+
+  const getPdfStatusLabel = (paper) => {
+    if (paper.pdf_available === true) {
+      return "PDF verified";
+    }
+
+    if (paper.pdf_status === "access_denied") {
+      return "PDF access denied";
+    }
+
+    if (paper.pdf_status === "not_pdf") {
+      return "Not a PDF";
+    }
+
+    if (paper.pdf_status === "too_large") {
+      return "PDF too large";
+    }
+
+    if (paper.pdf_status === "timeout") {
+      return "PDF check timed out";
+    }
+
+    if (paper.pdf_status === "unavailable") {
+      return "PDF unavailable";
+    }
+
+    if (paper.pdf_status === "error") {
+      return "PDF unavailable";
+    }
+
+    return "PDF unavailable";
   };
 
   const hasResults =
@@ -579,8 +556,7 @@ function PaperSearch({ className = "" }) {
             type="text"
             value={query}
             onChange={(event) => {
-              const value =
-                event.target.value;
+              const value = event.target.value;
 
               setQuery(value);
 
@@ -646,9 +622,7 @@ function PaperSearch({ className = "" }) {
 
                 <button
                   type="submit"
-                  disabled={
-                    !query.trim()
-                  }
+                  disabled={!query.trim()}
                   className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 transition hover:bg-indigo-500/[0.08] hover:text-indigo-300 disabled:cursor-not-allowed disabled:opacity-30"
                   aria-label="Search papers"
                 >
@@ -692,343 +666,324 @@ function PaperSearch({ className = "" }) {
               SEARCH ERROR
               ================================================== */}
 
-          {!loading &&
-            searchError && (
-              <div className="border-b border-red-400/10 bg-red-500/[0.04] px-5 py-4">
-                <p className="text-xs font-medium text-red-300">
-                  Search failed
-                </p>
+          {!loading && searchError && (
+            <div className="border-b border-red-400/10 bg-red-500/[0.04] px-5 py-4">
+              <p className="text-xs font-medium text-red-300">
+                Search failed
+              </p>
 
-                <p className="mt-1 text-[11px] text-red-300/70">
-                  {searchError}
-                </p>
-              </div>
-            )}
+              <p className="mt-1 text-[11px] text-red-300/70">
+                {searchError}
+              </p>
+            </div>
+          )}
 
           {/* ==================================================
               IMPORT ERROR
-              ==================================================
-              
-              This is deliberately separate from Search failed.
-              A PDF 403 belongs here.
               ================================================== */}
 
-          {!loading &&
-            importError && (
-              <div className="border-b border-amber-400/10 bg-amber-500/[0.035] px-5 py-3">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-amber-500/[0.08]">
-                    <FileText className="h-3.5 w-3.5 text-amber-400" />
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-amber-300">
-                      Paper could not be imported
-                    </p>
-
-                    <p className="mt-1 text-[11px] leading-4 text-amber-300/70">
-                      {importError.message}
-                    </p>
-
-                    <p className="mt-1 text-[10px] text-slate-600">
-                      The search results are still available.
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setImportError(null)
-                    }
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-600 transition hover:bg-white/[0.04] hover:text-slate-300"
-                    aria-label="Dismiss import error"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+          {!loading && importError && (
+            <div className="border-b border-amber-400/10 bg-amber-500/[0.035] px-5 py-3">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-amber-500/[0.08]">
+                  <FileText className="h-3.5 w-3.5 text-amber-400" />
                 </div>
+
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium text-amber-300">
+                    Paper could not be imported
+                  </p>
+
+                  <p className="mt-1 text-[11px] leading-4 text-amber-300/70">
+                    {importError.message}
+                  </p>
+
+                  <p className="mt-1 text-[10px] text-slate-600">
+                    The search results are still available.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setImportError(null)}
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-600 transition hover:bg-white/[0.04] hover:text-slate-300"
+                  aria-label="Dismiss import error"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
               </div>
-            )}
+            </div>
+          )}
 
           {/* ==================================================
               INTERNAL PAPERS
               ================================================== */}
 
-          {!loading &&
-            internalResults.length > 0 && (
-              <section>
-                <div className="flex items-center gap-2 border-b border-white/[0.05] px-5 py-3">
-                  <BookOpen className="h-3.5 w-3.5 text-indigo-400" />
+          {!loading && internalResults.length > 0 && (
+            <section>
+              <div className="flex items-center gap-2 border-b border-white/[0.05] px-5 py-3">
+                <BookOpen className="h-3.5 w-3.5 text-indigo-400" />
 
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                    Your SciBrain Papers
-                  </span>
-                </div>
+                <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Your SciBrain Papers
+                </span>
+              </div>
 
-                <div className="p-2">
-                  {internalResults.map(
-                    (paper) => (
-                      <button
-                        key={paper.id}
-                        type="button"
-                        onClick={() => {
-                          window.location.href =
-                            `/papers/${paper.id}`;
-                        }}
-                        className="group flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-white/[0.04]"
-                      >
-                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-indigo-400/10 bg-indigo-500/[0.08]">
-                          <FileText className="h-4 w-4 text-indigo-400" />
-                        </div>
+              <div className="p-2">
+                {internalResults.map((paper) => (
+                  <button
+                    key={paper.id}
+                    type="button"
+                    onClick={() => {
+                      window.location.href =
+                        `/papers/${paper.id}`;
+                    }}
+                    className="group flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-white/[0.04]"
+                  >
+                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-indigo-400/10 bg-indigo-500/[0.08]">
+                      <FileText className="h-4 w-4 text-indigo-400" />
+                    </div>
 
-                        <div className="min-w-0 flex-1">
-                          <p className="line-clamp-1 text-sm font-medium text-slate-200 group-hover:text-white">
-                            {paper.title ||
-                              paper.filename ||
-                              "Untitled paper"}
-                          </p>
+                    <div className="min-w-0 flex-1">
+                      <p className="line-clamp-1 text-sm font-medium text-slate-200 group-hover:text-white">
+                        {paper.title ||
+                          paper.filename ||
+                          "Untitled paper"}
+                      </p>
 
-                          <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-500">
-                            <span>
-                              SciBrain resource
+                      <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-500">
+                        <span>SciBrain resource</span>
+
+                        {paper.status && (
+                          <>
+                            <span>•</span>
+
+                            <span className="capitalize">
+                              {paper.status}
                             </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
 
-                            {paper.status && (
-                              <>
-                                <span>
-                                  •
-                                </span>
-
-                                <span className="capitalize">
-                                  {paper.status}
-                                </span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-
-                        <ExternalLink className="mt-1 h-3.5 w-3.5 shrink-0 text-slate-700 transition group-hover:text-indigo-400" />
-                      </button>
-                    )
-                  )}
-                </div>
-              </section>
-            )}
+                    <ExternalLink className="mt-1 h-3.5 w-3.5 shrink-0 text-slate-700 transition group-hover:text-indigo-400" />
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* ==================================================
               EXTERNAL PAPERS
               ================================================== */}
 
-          {!loading &&
-            externalResults.length > 0 && (
-              <section>
-                <div className="flex items-center gap-2 border-y border-white/[0.05] px-5 py-3">
-                  <Search className="h-3.5 w-3.5 text-cyan-400" />
+          {!loading && externalResults.length > 0 && (
+            <section>
+              <div className="flex items-center gap-2 border-y border-white/[0.05] px-5 py-3">
+                <Search className="h-3.5 w-3.5 text-cyan-400" />
 
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                    External Research
-                  </span>
+                <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  External Research
+                </span>
 
-                  <span className="ml-auto text-[9px] text-slate-600">
-                    {externalResults.length}{" "}
-                    results
-                  </span>
-                </div>
+                <span className="ml-auto text-[9px] text-slate-600">
+                  {externalResults.length} results
+                </span>
+              </div>
 
-                <div className="max-h-[440px] overflow-y-auto p-2">
-                  {externalResults.map(
-                    (paper) => {
-                      const paperKey =
-                        paper.id ||
-                        paper.source_id;
+              <div className="max-h-[440px] overflow-y-auto p-2">
+                {externalResults.map((paper) => {
+                  const paperKey =
+                    paper.id || paper.source_id;
 
-                      const imported =
-                        paper._imported ===
-                        true;
+                  const imported =
+                    paper._imported === true;
 
-                      const importing =
-                        importingId ===
-                        paperKey;
+                  const importing =
+                    importingId === paperKey;
 
-                      const thisPaperImportError =
-                        importError?.paperId ===
-                        paperKey;
+                  const thisPaperImportError =
+                    importError?.paperId === paperKey;
 
-                      return (
-                        <div
-                          key={paperKey}
-                          className="rounded-xl px-3 py-3 transition hover:bg-white/[0.035]"
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-cyan-400/10 bg-cyan-500/[0.06]">
-                              <FileText className="h-4 w-4 text-cyan-400" />
-                            </div>
+                  /*
+                   * IMPORTANT:
+                   *
+                   * pdf_available is now the source of truth.
+                   *
+                   * We intentionally do NOT use:
+                   *
+                   *     Boolean(paper.pdf_url)
+                   *
+                   * because a URL can exist while returning 403,
+                   * 404, HTML, or another non-PDF response.
+                   */
 
-                            <div className="min-w-0 flex-1">
-                              <p className="line-clamp-2 text-sm font-medium leading-5 text-slate-200">
-                                {paper.title ||
-                                  "Untitled paper"}
-                              </p>
+                  const pdfAvailable =
+                    paper.pdf_available === true;
 
-                              <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-slate-500">
-                                {paper.year && (
-                                  <span>
-                                    {
-                                      paper.year
-                                    }
-                                  </span>
-                                )}
+                  return (
+                    <div
+                      key={paperKey}
+                      className="rounded-xl px-3 py-3 transition hover:bg-white/[0.035]"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-cyan-400/10 bg-cyan-500/[0.06]">
+                          <FileText className="h-4 w-4 text-cyan-400" />
+                        </div>
 
-                                {paper.venue && (
-                                  <>
-                                    <span>
-                                      •
-                                    </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="line-clamp-2 text-sm font-medium leading-5 text-slate-200">
+                            {paper.title ||
+                              "Untitled paper"}
+                          </p>
 
-                                    <span className="max-w-[150px] truncate">
-                                      {
-                                        paper.venue
-                                      }
-                                    </span>
-                                  </>
-                                )}
+                          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-slate-500">
+                            {paper.year && (
+                              <span>{paper.year}</span>
+                            )}
+
+                            {paper.venue && (
+                              <>
+                                <span>•</span>
+
+                                <span className="max-w-[150px] truncate">
+                                  {paper.venue}
+                                </span>
+                              </>
+                            )}
+
+                            <span>•</span>
+
+                            <span className="text-cyan-400/80">
+                              {getSourceLabel(
+                                paper.source
+                              )}
+                            </span>
+
+                            {typeof paper.relevance_score ===
+                              "number" && (
+                              <>
+                                <span>•</span>
 
                                 <span>
-                                  •
-                                </span>
-
-                                <span className="text-cyan-400/80">
-                                  {getSourceLabel(
-                                    paper.source
+                                  {Math.round(
+                                    paper.relevance_score *
+                                      100
                                   )}
+                                  % match
                                 </span>
+                              </>
+                            )}
+                          </div>
 
-                                {typeof paper.relevance_score ===
-                                  "number" && (
-                                  <>
-                                    <span>
-                                      •
-                                    </span>
-
-                                    <span>
-                                      {Math.round(
-                                        paper.relevance_score *
-                                          100
-                                      )}
-                                      % match
-                                    </span>
-                                  </>
-                                )}
-                              </div>
-
+                          {formatAuthors(
+                            paper.authors
+                          ) && (
+                            <p className="mt-1 line-clamp-1 text-[10px] text-slate-600">
                               {formatAuthors(
                                 paper.authors
-                              ) && (
-                                <p className="mt-1 line-clamp-1 text-[10px] text-slate-600">
-                                  {formatAuthors(
-                                    paper.authors
-                                  )}
-                                </p>
                               )}
+                            </p>
+                          )}
 
-                              {/* --------------------------------
-                                  ACTIONS
-                                  -------------------------------- */}
+                          {/* --------------------------------
+                              ACTIONS
+                              -------------------------------- */}
 
-                              <div className="mt-2 flex items-center gap-2">
-                                {paper.url && (
-                                  <a
-                                    href={
-                                      paper.url
-                                    }
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    onClick={(
-                                      event
-                                    ) =>
-                                      event.stopPropagation()
-                                    }
-                                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.06] px-2.5 py-1.5 text-[10px] font-medium text-slate-400 transition hover:border-indigo-400/15 hover:bg-indigo-500/[0.05] hover:text-indigo-300"
-                                  >
-                                    <ExternalLink className="h-3 w-3" />
+                          <div className="mt-2 flex items-center gap-2">
+                            {paper.url && (
+                              <a
+                                href={paper.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(event) =>
+                                  event.stopPropagation()
+                                }
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.06] px-2.5 py-1.5 text-[10px] font-medium text-slate-400 transition hover:border-indigo-400/15 hover:bg-indigo-500/[0.05] hover:text-indigo-300"
+                              >
+                                <ExternalLink className="h-3 w-3" />
 
-                                    Open
-                                  </a>
-                                )}
+                                Open
+                              </a>
+                            )}
 
-                                {/* --------------------------------
-                                    PDF AVAILABLE
-                                    -------------------------------- */}
+                            {/* --------------------------------
+                                VERIFIED PDF AVAILABLE
+                                -------------------------------- */}
 
-                                {paper.pdf_url ? (
-                                  imported ? (
-                                    <div className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-400/10 bg-emerald-500/[0.05] px-2.5 py-1.5 text-[10px] font-medium text-emerald-300">
-                                      <Check className="h-3 w-3" />
+                            {pdfAvailable ? (
+                              imported ? (
+                                <div className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-400/10 bg-emerald-500/[0.05] px-2.5 py-1.5 text-[10px] font-medium text-emerald-300">
+                                  <Check className="h-3 w-3" />
 
-                                      In SciBrain
-                                    </div>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      disabled={
-                                        importing
-                                      }
-                                      onClick={() =>
-                                        handleImport(
-                                          paper
-                                        )
-                                      }
-                                      className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-400/15 bg-indigo-500/[0.08] px-2.5 py-1.5 text-[10px] font-medium text-indigo-300 transition hover:bg-indigo-500/[0.14] disabled:cursor-not-allowed disabled:opacity-60"
-                                    >
-                                      {importing ? (
-                                        <>
-                                          <Loader2 className="h-3 w-3 animate-spin" />
-
-                                          Importing...
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Upload className="h-3 w-3" />
-
-                                          Import
-                                        </>
-                                      )}
-                                    </button>
-                                  )
-                                ) : (
-                                  <span className="rounded-lg border border-white/[0.05] px-2.5 py-1.5 text-[10px] text-slate-600">
-                                    PDF unavailable
-                                  </span>
-                                )}
-                              </div>
-
-                              {/* --------------------------------
-                                  PAPER-SPECIFIC IMPORT ERROR
-                                  -------------------------------- */}
-
-                              {thisPaperImportError && (
-                                <div className="mt-2 rounded-lg border border-amber-400/10 bg-amber-500/[0.035] px-2.5 py-2">
-                                  <p className="text-[10px] leading-4 text-amber-300/70">
-                                    Import failed:{" "}
-                                    {
-                                      importError.message
-                                    }
-                                  </p>
-
-                                  <p className="mt-1 text-[9px] text-slate-600">
-                                    The paper is still available
-                                    in the search results.
-                                  </p>
+                                  In SciBrain
                                 </div>
-                              )}
-                            </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled={importing}
+                                  onClick={() =>
+                                    handleImport(
+                                      paper
+                                    )
+                                  }
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-400/15 bg-indigo-500/[0.08] px-2.5 py-1.5 text-[10px] font-medium text-indigo-300 transition hover:bg-indigo-500/[0.14] disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {importing ? (
+                                    <>
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+
+                                      Importing...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Upload className="h-3 w-3" />
+
+                                      Import
+                                    </>
+                                  )}
+                                </button>
+                              )
+                            ) : (
+                              <span
+                                title={
+                                  paper.pdf_status ||
+                                  "No verified PDF available"
+                                }
+                                className="rounded-lg border border-white/[0.05] px-2.5 py-1.5 text-[10px] text-slate-600"
+                              >
+                                {getPdfStatusLabel(
+                                  paper
+                                )}
+                              </span>
+                            )}
                           </div>
+
+                          {/* --------------------------------
+                              PAPER-SPECIFIC IMPORT ERROR
+                              -------------------------------- */}
+
+                          {thisPaperImportError && (
+                            <div className="mt-2 rounded-lg border border-amber-400/10 bg-amber-500/[0.035] px-2.5 py-2">
+                              <p className="text-[10px] leading-4 text-amber-300/70">
+                                Import failed:{" "}
+                                {importError.message}
+                              </p>
+
+                              <p className="mt-1 text-[9px] text-slate-600">
+                                The paper is still available
+                                in the search results.
+                              </p>
+                            </div>
+                          )}
                         </div>
-                      );
-                    }
-                  )}
-                </div>
-              </section>
-            )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           {/* ==================================================
               NO RESULTS
@@ -1058,20 +1013,13 @@ function PaperSearch({ className = "" }) {
 
           {!loading &&
             searched &&
-            Object.keys(
-              sourceStatus
-            ).length > 0 && (
+            Object.keys(sourceStatus).length > 0 && (
               <div className="border-t border-white/[0.05] px-5 py-2.5">
                 <div className="flex flex-wrap items-center gap-3 text-[9px] uppercase tracking-[0.12em] text-slate-600">
-                  {Object.entries(
-                    sourceStatus
-                  ).map(
+                  {Object.entries(sourceStatus).map(
                     ([source, status]) => (
                       <span key={source}>
-                        {getSourceLabel(
-                          source
-                        )}
-                        :{" "}
+                        {getSourceLabel(source)}:{" "}
                         <span
                           className={
                             status?.status ===

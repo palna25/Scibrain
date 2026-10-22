@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate,useLocation, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   BookOpen,
@@ -19,6 +19,7 @@ import AppLayout from "../components/AppLayout";
 import { useResearchContext } from "../context/ResearchContext";
 
 const API_URL = "http://127.0.0.1:8000";
+const ACTIVE_NOTEBOOK_KEY = "scibrain_active_notebook_id";
 
 const NODE_TYPES = [
   "all",
@@ -45,7 +46,6 @@ const NODE_STYLES = {
     text: "text-indigo-300",
     hex: "#818cf8",
   },
-
   author: {
     fill: "fill-cyan-500/15",
     stroke: "stroke-cyan-400",
@@ -53,7 +53,6 @@ const NODE_STYLES = {
     text: "text-cyan-300",
     hex: "#22d3ee",
   },
-
   method: {
     fill: "fill-violet-500/15",
     stroke: "stroke-violet-400",
@@ -61,7 +60,6 @@ const NODE_STYLES = {
     text: "text-violet-300",
     hex: "#a78bfa",
   },
-
   dataset: {
     fill: "fill-emerald-500/15",
     stroke: "stroke-emerald-400",
@@ -69,7 +67,6 @@ const NODE_STYLES = {
     text: "text-emerald-300",
     hex: "#34d399",
   },
-
   metric: {
     fill: "fill-amber-500/15",
     stroke: "stroke-amber-400",
@@ -77,7 +74,6 @@ const NODE_STYLES = {
     text: "text-amber-300",
     hex: "#fbbf24",
   },
-
   concept: {
     fill: "fill-sky-500/15",
     stroke: "stroke-sky-400",
@@ -85,7 +81,6 @@ const NODE_STYLES = {
     text: "text-sky-300",
     hex: "#38bdf8",
   },
-
   finding: {
     fill: "fill-green-500/15",
     stroke: "stroke-green-400",
@@ -93,7 +88,6 @@ const NODE_STYLES = {
     text: "text-green-300",
     hex: "#4ade80",
   },
-
   limitation: {
     fill: "fill-red-500/15",
     stroke: "stroke-red-400",
@@ -101,7 +95,6 @@ const NODE_STYLES = {
     text: "text-red-300",
     hex: "#f87171",
   },
-
   future_work: {
     fill: "fill-orange-500/15",
     stroke: "stroke-orange-400",
@@ -109,7 +102,6 @@ const NODE_STYLES = {
     text: "text-orange-300",
     hex: "#fb923c",
   },
-
   problem: {
     fill: "fill-pink-500/15",
     stroke: "stroke-pink-400",
@@ -117,7 +109,6 @@ const NODE_STYLES = {
     text: "text-pink-300",
     hex: "#f472b6",
   },
-
   organization: {
     fill: "fill-blue-500/15",
     stroke: "stroke-blue-400",
@@ -125,7 +116,6 @@ const NODE_STYLES = {
     text: "text-blue-300",
     hex: "#60a5fa",
   },
-
   tool: {
     fill: "fill-teal-500/15",
     stroke: "stroke-teal-400",
@@ -133,7 +123,6 @@ const NODE_STYLES = {
     text: "text-teal-300",
     hex: "#2dd4bf",
   },
-
   model: {
     fill: "fill-purple-500/15",
     stroke: "stroke-purple-400",
@@ -143,9 +132,42 @@ const NODE_STYLES = {
   },
 };
 
+function getAuthHeaders() {
+  const token = localStorage.getItem("scibrain_token");
+
+  return token
+    ? { Authorization: `Bearer ${token}` }
+    : {};
+}
+
+function getPaperId(paper) {
+  return String(
+    paper?.id ??
+      paper?.paper_id ??
+      paper?._id ??
+      ""
+  );
+}
+
 function KnowledgeGraph() {
-  const navigate = useNavigate();
-  const { selectedResourceIds } = useResearchContext();
+  const location = useLocation();
+  const { notebookId: routeNotebookId } = useParams();
+ const notebookId = String(
+    location.state?.notebookId ||
+      routeNotebookId ||
+      sessionStorage.getItem(ACTIVE_NOTEBOOK_KEY) ||
+      ""
+  );
+
+  // The active notebook is authoritative when this page is opened
+  // through /notebook/:notebookId/knowledge-graph.
+  // Global context is retained only for the legacy standalone route.
+  const {
+    selectedResourceIds: globalSelectedResourceIds = [],
+  } = useResearchContext();
+
+  const [notebook, setNotebook] = useState(null);
+  const [notebookLoaded, setNotebookLoaded] = useState(!notebookId);
 
   const [papers, setPapers] = useState([]);
   const [nodes, setNodes] = useState([]);
@@ -160,24 +182,146 @@ function KnowledgeGraph() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [nodeType, setNodeType] = useState("all");
-
   const [zoom, setZoom] = useState(1);
 
-  // --------------------------------------------------
-  // Load research sources
+  const backToNotebook = () => {
+    navigate(
+      notebookId
+        ? `/notebook/${encodeURIComponent(notebookId)}`
+        : "/notebook"
+    );
+  };
+
+   // --------------------------------------------------
+  // Load the active notebook
   // --------------------------------------------------
 
   useEffect(() => {
-    const loadPapers = async () => {
-      try {
-        setLoadingPapers(true);
-        setError("");
+    let cancelled = false;
 
+    const loadNotebook = async () => {
+      setNotebookLoaded(false);
+      setNotebook(null);
+      setNodes([]);
+      setEdges([]);
+      setSelectedNode(null);
+      setError("");
+
+      if (!notebookId) {
+        setNotebookLoaded(true);
+        setError(
+          "No active research notebook was found. Open a notebook and launch Knowledge Graph from there."
+        );
+        return;
+      }
+
+      try {
         const response = await fetch(
-          `${API_URL}/api/papers/`
+          `${API_URL}/api/notebook/${encodeURIComponent(notebookId)}`,
+          {
+            headers: getAuthHeaders(),
+          }
+        );
+
+        let data = null;
+
+        try {
+          data = await response.json();
+        } catch {
+          data = null;
+        }
+
+        if (response.status === 401) {
+          throw new Error(
+            "Your session has expired. Please sign in again."
+          );
+        }
+
+        if (response.status === 404) {
+          throw new Error(
+            "This research notebook could not be found."
+          );
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            data?.detail ||
+              "Failed to load the research notebook."
+          );
+        }
+
+        const loadedNotebook = data?.notebook;
+
+        if (!loadedNotebook) {
+          throw new Error(
+            "The server did not return the requested notebook."
+          );
+        }
+
+        if (cancelled) return;
+
+        setNotebook(loadedNotebook);
+
+        const savedNotebookId = String(
+          loadedNotebook.notebook_id || notebookId
+        );
+
+        sessionStorage.setItem(
+          ACTIVE_NOTEBOOK_KEY,
+          savedNotebookId
+        );
+      } catch (err) {
+        if (!cancelled) {
+          console.error(
+            "Knowledge Graph notebook loading error:",
+            err
+          );
+
+          setNotebook(null);
+          setError(
+            err.message ||
+              "Failed to load the research notebook."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setNotebookLoaded(true);
+        }
+      }
+    };
+
+    loadNotebook();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [notebookId]);
+
+  // --------------------------------------------------
+  // Load research source metadata
+  // --------------------------------------------------
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPapers = async () => {
+      setLoadingPapers(true);
+
+      try {
+        const response = await fetch(
+          `${API_URL}/api/papers/`,
+          {
+            headers: getAuthHeaders(),
+          }
         );
 
         if (!response.ok) {
+          if (response.status === 401) {
+            throw new Error(
+              "Your session has expired. Please sign in again."
+            );
+          }
+
           throw new Error(
             "Failed to load research sources."
           );
@@ -185,44 +329,83 @@ function KnowledgeGraph() {
 
         const data = await response.json();
 
-        setPapers(
-          Array.isArray(data)
-            ? data.map((paper) => ({
-                id: paper.id || paper._id,
+        const rawPapers = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.papers)
+            ? data.papers
+            : [];
+
+        if (!cancelled) {
+          setPapers(
+            rawPapers
+              .map((paper) => ({
+                ...paper,
+                id: getPaperId(paper),
                 title:
                   paper.title ||
                   paper.filename ||
                   "Untitled Research Paper",
               }))
-            : []
-        );
+              .filter((paper) => paper.id)
+          );
+        }
       } catch (err) {
-        console.error(err);
-
-        setError(
-          err.message ||
+        if (!cancelled) {
+          console.error(err);
+          setError((current) =>
+            current ||
+            err.message ||
             "Failed to load research sources."
-        );
+          );
+        }
       } finally {
-        setLoadingPapers(false);
+        if (!cancelled) {
+          setLoadingPapers(false);
+        }
       }
     };
 
     loadPapers();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // --------------------------------------------------
+    // --------------------------------------------------
   // Selected research sources
+  // The notebook's persisted source selection is the
+  // single source of truth, matching Research Gaps.
   // --------------------------------------------------
+
+  const selectedResourceIds = useMemo(() => {
+    const ids = Array.isArray(notebook?.resource_ids)
+      ? notebook.resource_ids
+      : [];
+
+    return [
+      ...new Set(
+        ids.map(String).filter(Boolean)
+      ),
+    ];
+  }, [notebook]);
+
+  const selectedIdSet = useMemo(
+    () => new Set(selectedResourceIds),
+    [selectedResourceIds]
+  );
 
   const selectedPapers = useMemo(
     () =>
       papers.filter((paper) =>
-        selectedResourceIds.includes(
-          String(paper.id)
-        )
+        selectedIdSet.has(String(paper.id))
       ),
-    [papers, selectedResourceIds]
+    [papers, selectedIdSet]
+  );
+
+  const missingSourceCount = Math.max(
+    0,
+    selectedResourceIds.length - selectedPapers.length
   );
 
   // --------------------------------------------------
@@ -230,8 +413,7 @@ function KnowledgeGraph() {
   // --------------------------------------------------
 
   const filteredNodes = useMemo(() => {
-    const query =
-      searchQuery.trim().toLowerCase();
+    const query = searchQuery.trim().toLowerCase();
 
     return nodes.filter((node) => {
       const name = String(
@@ -255,16 +437,9 @@ function KnowledgeGraph() {
         name.includes(query) ||
         description.includes(query);
 
-      return (
-        matchesType &&
-        matchesSearch
-      );
+      return matchesType && matchesSearch;
     });
-  }, [
-    nodes,
-    nodeType,
-    searchQuery,
-  ]);
+  }, [nodes, nodeType, searchQuery]);
 
   // --------------------------------------------------
   // Visible edges
@@ -279,28 +454,40 @@ function KnowledgeGraph() {
 
     return edges.filter(
       (edge) =>
-        visibleIds.has(
-          String(edge.source)
-        ) &&
-        visibleIds.has(
-          String(edge.target)
-        )
+        visibleIds.has(String(edge.source)) &&
+        visibleIds.has(String(edge.target))
     );
-  }, [
-    edges,
-    filteredNodes,
-  ]);
+  }, [edges, filteredNodes]);
 
   // --------------------------------------------------
   // Generate graph
   // --------------------------------------------------
 
   const generateGraph = async () => {
-    if (
-      selectedResourceIds.length === 0
-    ) {
+    if (notebookId && !notebookLoaded) {
       setError(
-        "Select at least one research source in the Research Notebook."
+        "Please wait while the research notebook loads."
+      );
+      return;
+    }
+
+        if (!notebookId || !notebookLoaded || !notebook) {
+      setError(
+        "Load a valid research notebook before generating its knowledge graph."
+      );
+      return;
+    }
+
+    if (selectedResourceIds.length === 0) {
+      setError(
+        "Add at least one research paper to this notebook before generating a knowledge graph."
+      );
+      return;
+    }
+
+    if (missingSourceCount > 0) {
+      setError(
+        `${missingSourceCount} saved notebook source(s) could not be matched to available paper records. Check the notebook sources before generating the graph.`
       );
       return;
     }
@@ -316,19 +503,17 @@ function KnowledgeGraph() {
         {
           method: "POST",
           headers: {
-            "Content-Type":
-              "application/json",
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
           },
           body: JSON.stringify({
-            resource_ids:
-              selectedResourceIds,
+            resource_ids: selectedResourceIds,
           }),
         }
       );
 
       if (!response.ok) {
-        const message =
-          await response.text();
+        const message = await response.text();
 
         throw new Error(
           message ||
@@ -336,8 +521,7 @@ function KnowledgeGraph() {
         );
       }
 
-      const data =
-        await response.json();
+      const data = await response.json();
 
       setNodes(
         Array.isArray(data.nodes)
@@ -370,9 +554,7 @@ function KnowledgeGraph() {
     setZoom((current) =>
       Math.min(
         1.8,
-        Number(
-          (current + 0.15).toFixed(2)
-        )
+        Number((current + 0.15).toFixed(2))
       )
     );
   };
@@ -381,9 +563,7 @@ function KnowledgeGraph() {
     setZoom((current) =>
       Math.max(
         0.65,
-        Number(
-          (current - 0.15).toFixed(2)
-        )
+        Number((current - 0.15).toFixed(2))
       )
     );
   };
@@ -410,18 +590,14 @@ function KnowledgeGraph() {
         String(edge.source) ===
         String(selectedNode.id)
       ) {
-        connected.add(
-          String(edge.target)
-        );
+        connected.add(String(edge.target));
       }
 
       if (
         String(edge.target) ===
         String(selectedNode.id)
       ) {
-        connected.add(
-          String(edge.source)
-        );
+        connected.add(String(edge.source));
       }
     });
 
@@ -431,37 +607,26 @@ function KnowledgeGraph() {
   return (
     <AppLayout>
       <div className="min-h-[calc(100vh-6rem)]">
-
-        {/* ==================================================
-            HEADER
-        ================================================== */}
+        {/* HEADER */}
 
         <div className="flex flex-col gap-5 border-b border-white/[0.06] pb-6 lg:flex-row lg:items-center lg:justify-between">
-
           <div className="flex items-start gap-3">
-
             <button
               type="button"
-              onClick={() =>
-                navigate(
-                  "/research-notebook"
-                )
-              }
+              onClick={backToNotebook}
               className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-slate-900/60 text-slate-500 transition hover:bg-white/[0.04] hover:text-slate-200"
+              aria-label="Back to research notebook"
             >
               <ArrowLeft className="h-4 w-4" />
             </button>
 
             <div>
-
               <div className="flex items-center gap-2">
-
                 <Network className="h-4 w-4 text-cyan-400" />
 
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-400">
                   Research Intelligence
                 </p>
-
               </div>
 
               <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white">
@@ -469,11 +634,10 @@ function KnowledgeGraph() {
               </h1>
 
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-                Explore evidence-grounded entities
-                and relationships discovered across
-                your selected research sources.
+                Explore evidence-grounded entities and
+                relationships discovered across your
+                selected research sources.
               </p>
-
             </div>
           </div>
 
@@ -482,6 +646,9 @@ function KnowledgeGraph() {
             onClick={generateGraph}
             disabled={
               generating ||
+              loadingPapers ||
+              !notebookLoaded ||
+              (Boolean(notebookId) && !notebook) ||
               selectedResourceIds.length === 0
             }
             className="flex shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-500 px-4 py-2.5 text-xs font-medium text-white shadow-lg shadow-indigo-500/20 transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-40"
@@ -498,153 +665,144 @@ function KnowledgeGraph() {
               </>
             )}
           </button>
-
         </div>
 
-        {/* ==================================================
-            ACTIVE CONTEXT
-        ================================================== */}
+        {/* ACTIVE CONTEXT */}
 
         <div className="mt-5 rounded-2xl border border-white/[0.06] bg-slate-950/40">
-
           <div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
-
             <div className="flex items-center gap-3">
-
               <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-indigo-400/10 bg-indigo-500/[0.06]">
                 <BookOpen className="h-4 w-4 text-indigo-400" />
               </div>
 
               <div>
-
                 <p className="text-xs font-medium text-slate-300">
-                  Active Research Context
+                  {notebookId
+                    ? notebook?.title || "Research Notebook"
+                    : "Active Research Context"}
                 </p>
 
                 <p className="mt-1 text-[10px] text-slate-600">
-                  {selectedResourceIds.length}{" "}
-                  selected{" "}
-                  {selectedResourceIds.length ===
-                  1
-                    ? "source"
-                    : "sources"}
-                </p>
-
+  {!notebookLoaded
+    ? "Loading notebook sources..."
+    : notebook
+      ? `${selectedResourceIds.length} selected ${
+          selectedResourceIds.length === 1
+            ? "source"
+            : "sources"
+        }`
+      : "No notebook loaded"}
+</p>
+{notebookLoaded &&
+  notebook &&
+  missingSourceCount > 0 &&
+  !loadingPapers && (
+    <div className="border-t border-white/[0.06] px-5 py-3">
+      <p className="text-xs leading-5 text-amber-300/80">
+        {missingSourceCount} saved source
+        {missingSourceCount === 1 ? " is" : "s are"} not
+        available in the paper records. Resolve the missing
+        sources before generating the graph.
+      </p>
+    </div>
+  )}
               </div>
-
             </div>
 
             <button
               type="button"
-              onClick={() =>
-                navigate(
-                  "/research-notebook"
-                )
-              }
+              onClick={backToNotebook}
               className="flex items-center gap-1.5 text-[10px] text-indigo-400 transition hover:text-indigo-300"
             >
               Change sources
               <ChevronRight className="h-3 w-3" />
             </button>
-
           </div>
 
           {selectedPapers.length > 0 && (
             <div className="border-t border-white/[0.06] px-5 py-3">
-
               <div className="flex flex-wrap gap-2">
+                {selectedPapers.map((paper) => (
+                  <div
+                    key={paper.id}
+                    className="flex max-w-xs items-center gap-2 rounded-lg border border-white/[0.05] bg-slate-900/50 px-2.5 py-1.5"
+                  >
+                    <FileText className="h-3 w-3 shrink-0 text-indigo-400" />
 
-                {selectedPapers.map(
-                  (paper) => (
-                    <div
-                      key={paper.id}
-                      className="flex max-w-xs items-center gap-2 rounded-lg border border-white/[0.05] bg-slate-900/50 px-2.5 py-1.5"
-                    >
-                      <FileText className="h-3 w-3 shrink-0 text-indigo-400" />
-
-                      <span className="truncate text-[10px] text-slate-500">
-                        {paper.title}
-                      </span>
-                    </div>
-                  )
-                )}
-
+                    <span className="truncate text-[10px] text-slate-500">
+                      {paper.title}
+                    </span>
+                  </div>
+                ))}
               </div>
-
             </div>
           )}
 
+          {notebookLoaded &&
+            notebookId &&
+            notebook &&
+            selectedResourceIds.length > 0 &&
+            selectedPapers.length === 0 &&
+            !loadingPapers && (
+              <div className="border-t border-white/[0.06] px-5 py-3">
+                <p className="text-xs leading-5 text-amber-300/80">
+                  This notebook has saved source IDs, but
+                  matching paper metadata could not be
+                  found. Check that the sources still
+                  exist and are available to your account.
+                </p>
+              </div>
+            )}
         </div>
 
-        {/* ==================================================
-            ERROR
-        ================================================== */}
+        {/* ERROR */}
 
         {error && (
           <div className="mt-5 flex items-start justify-between gap-4 rounded-xl border border-red-400/10 bg-red-500/[0.04] px-4 py-3 text-xs text-red-300">
-
-            <span>
-              {error}
-            </span>
+            <span>{error}</span>
 
             <button
               type="button"
-              onClick={() =>
-                setError("")
-              }
+              onClick={() => setError("")}
               className="shrink-0 text-red-400/70 hover:text-red-300"
+              aria-label="Dismiss error"
             >
               <X className="h-4 w-4" />
             </button>
-
           </div>
         )}
 
-        {/* ==================================================
-            GRAPH WORKSPACE
-        ================================================== */}
+        {/* GRAPH WORKSPACE */}
 
         <div className="mt-5 grid min-h-[620px] gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
-
-          {/* ==================================================
-              GRAPH CANVAS
-          ================================================== */}
+          {/* GRAPH CANVAS */}
 
           <section className="relative min-h-[620px] overflow-hidden rounded-2xl border border-white/[0.07] bg-slate-950/50">
-
             {/* Top toolbar */}
 
             <div className="absolute left-4 right-4 top-4 z-30 flex items-center justify-between gap-3">
-
               <div className="flex items-center gap-2 rounded-xl border border-white/[0.07] bg-slate-900/90 p-1.5 shadow-xl backdrop-blur">
-
                 <div className="relative">
-
                   <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-600" />
 
                   <input
                     value={searchQuery}
                     onChange={(event) =>
-                      setSearchQuery(
-                        event.target.value
-                      )
+                      setSearchQuery(event.target.value)
                     }
                     placeholder="Search entities..."
                     className="h-8 w-52 bg-transparent pl-8 pr-3 text-xs text-slate-300 outline-none placeholder:text-slate-600"
+                    aria-label="Search graph entities"
                   />
-
                 </div>
-
               </div>
 
               <div className="flex items-center gap-1 rounded-xl border border-white/[0.07] bg-slate-900/90 p-1 shadow-xl backdrop-blur">
-
                 <button
                   type="button"
                   onClick={zoomOut}
-                  disabled={
-                    zoom <= 0.65
-                  }
+                  disabled={zoom <= 0.65}
                   className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white/[0.04] hover:text-slate-300 disabled:opacity-30"
                   title="Zoom out"
                 >
@@ -657,18 +815,13 @@ function KnowledgeGraph() {
                   className="flex h-8 min-w-10 items-center justify-center rounded-lg px-2 text-[9px] text-slate-500 transition hover:bg-white/[0.04] hover:text-slate-300"
                   title="Reset zoom"
                 >
-                  {Math.round(
-                    zoom * 100
-                  )}
-                  %
+                  {Math.round(zoom * 100)}%
                 </button>
 
                 <button
                   type="button"
                   onClick={zoomIn}
-                  disabled={
-                    zoom >= 1.8
-                  }
+                  disabled={zoom >= 1.8}
                   className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white/[0.04] hover:text-slate-300 disabled:opacity-30"
                   title="Zoom in"
                 >
@@ -680,15 +833,22 @@ function KnowledgeGraph() {
                 <button
                   type="button"
                   onClick={generateGraph}
-                  disabled={generating}
+                  disabled={
+                    generating ||
+                    loadingPapers ||
+                    !notebookLoaded ||
+                    !notebookId ||
+                    !notebook ||
+                    selectedResourceIds.length === 0 ||
+                    missingSourceCount > 0
+                  }
                   className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white/[0.04] hover:text-indigo-400 disabled:opacity-40"
                   title="Regenerate graph"
+                  aria-label="Regenerate graph"
                 >
                   <RefreshCw
                     className={`h-3.5 w-3.5 ${
-                      generating
-                        ? "animate-spin"
-                        : ""
+                      generating ? "animate-spin" : ""
                     }`}
                   />
                 </button>
@@ -697,110 +857,73 @@ function KnowledgeGraph() {
                   type="button"
                   onClick={() =>
                     document
-                      .querySelector(
-                        "[data-kg-canvas]"
-                      )
+                      .querySelector("[data-kg-canvas]")
                       ?.requestFullscreen?.()
                   }
                   className="hidden h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white/[0.04] hover:text-slate-300 sm:flex"
                   title="Fullscreen graph"
+                  aria-label="Fullscreen graph"
                 >
                   <Maximize2 className="h-3.5 w-3.5" />
                 </button>
-
               </div>
-
             </div>
 
             {/* Legend */}
 
-            {nodes.length > 0 && (
-              <GraphLegend />
-            )}
+            {nodes.length > 0 && <GraphLegend />}
 
             {/* Type filter */}
 
             <div className="absolute bottom-4 left-4 right-4 z-30">
-
               <div className="flex max-w-full gap-1 overflow-x-auto rounded-xl border border-white/[0.07] bg-slate-900/90 p-1.5 shadow-xl backdrop-blur">
-
-                {NODE_TYPES.map(
-                  (type) => (
-                    <button
-                      key={type}
-                      type="button"
-                      onClick={() =>
-                        setNodeType(
-                          type
-                        )
-                      }
-                      className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[9px] font-medium capitalize transition ${
-                        nodeType ===
-                        type
-                          ? "bg-indigo-500/15 text-indigo-300"
-                          : "text-slate-600 hover:bg-white/[0.03] hover:text-slate-400"
-                      }`}
-                    >
-                      {formatNodeType(
-                        type
-                      )}
-                    </button>
-                  )
-                )}
-
+                {NODE_TYPES.map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setNodeType(type)}
+                    className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[9px] font-medium capitalize transition ${
+                      nodeType === type
+                        ? "bg-indigo-500/15 text-indigo-300"
+                        : "text-slate-600 hover:bg-white/[0.03] hover:text-slate-400"
+                    }`}
+                  >
+                    {formatNodeType(type)}
+                  </button>
+                ))}
               </div>
-
             </div>
 
             {/* Graph */}
 
-            {generating ? (
+            {generating || !notebookLoaded ? (
               <GraphLoading />
-            ) : filteredNodes.length ===
-              0 ? (
+            ) : loadingPapers ? (
+              <GraphLoading />
+            ) : filteredNodes.length === 0 ? (
               <GraphEmpty
-                hasSources={
-                  selectedResourceIds.length >
-                  0
-                }
-                hasGraph={
-                  nodes.length > 0
-                }
-                onGenerate={
-                  generateGraph
-                }
+                hasSources={selectedResourceIds.length > 0}
+                hasGraph={nodes.length > 0}
+                onGenerate={generateGraph}
               />
             ) : (
               <GraphCanvas
                 nodes={filteredNodes}
                 edges={visibleEdges}
-                selectedNode={
-                  selectedNode
-                }
-                selectedNeighborhood={
-                  selectedNeighborhood
-                }
-                onSelect={
-                  setSelectedNode
-                }
+                selectedNode={selectedNode}
+                selectedNeighborhood={selectedNeighborhood}
+                onSelect={setSelectedNode}
                 zoom={zoom}
               />
             )}
-
           </section>
 
-          {/* ==================================================
-              ENTITY DETAILS
-          ================================================== */}
+          {/* ENTITY DETAILS */}
 
           <aside className="min-h-[620px] overflow-hidden rounded-2xl border border-white/[0.07] bg-slate-950/40">
-
             <div className="border-b border-white/[0.06] p-5">
-
               <div className="flex items-center justify-between">
-
                 <div>
-
                   <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-400">
                     Entity Details
                   </p>
@@ -808,25 +931,19 @@ function KnowledgeGraph() {
                   <p className="mt-1 text-xs text-slate-600">
                     Select an entity from the graph.
                   </p>
-
                 </div>
 
                 {selectedNode && (
                   <button
                     type="button"
-                    onClick={() =>
-                      setSelectedNode(
-                        null
-                      )
-                    }
+                    onClick={() => setSelectedNode(null)}
                     className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-600 transition hover:bg-white/[0.04] hover:text-slate-300"
+                    aria-label="Clear selected entity"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
                 )}
-
               </div>
-
             </div>
 
             {selectedNode ? (
@@ -838,7 +955,6 @@ function KnowledgeGraph() {
               />
             ) : (
               <div className="flex h-[500px] flex-col items-center justify-center px-6 text-center">
-
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/[0.06] bg-slate-900/50">
                   <Network className="h-5 w-5 text-slate-700" />
                 </div>
@@ -848,53 +964,30 @@ function KnowledgeGraph() {
                 </p>
 
                 <p className="mt-2 text-[10px] leading-4 text-slate-700">
-                  Select a node to inspect its
-                  relationships, evidence, and
-                  source papers.
+                  Select a node to inspect its relationships,
+                  evidence, and source papers.
                 </p>
-
               </div>
             )}
-
           </aside>
-
         </div>
 
-        {/* ==================================================
-            GRAPH STATISTICS
-        ================================================== */}
+        {/* GRAPH STATISTICS */}
 
         {nodes.length > 0 && (
           <div className="mt-4 flex flex-wrap items-center gap-3">
-
-            <Stat
-              label="Nodes"
-              value={nodes.length}
-            />
-
-            <Stat
-              label="Relationships"
-              value={edges.length}
-            />
-
-            <Stat
-              label="Visible"
-              value={
-                filteredNodes.length
-              }
-            />
+            <Stat label="Nodes" value={nodes.length} />
+            <Stat label="Relationships" value={edges.length} />
+            <Stat label="Visible" value={filteredNodes.length} />
 
             <Stat
               label="Sources"
               value={
                 new Set(
-                  nodes.flatMap(
-                    (node) =>
-                      Array.isArray(
-                        node.resource_ids
-                      )
-                        ? node.resource_ids
-                        : []
+                  nodes.flatMap((node) =>
+                    Array.isArray(node.resource_ids)
+                      ? node.resource_ids.map(String)
+                      : []
                   )
                 ).size
               }
@@ -902,14 +995,11 @@ function KnowledgeGraph() {
 
             {searchQuery && (
               <span className="text-[10px] text-slate-700">
-                Filtered by "
-                {searchQuery}"
+                Filtered by "{searchQuery}"
               </span>
             )}
-
           </div>
         )}
-
       </div>
     </AppLayout>
   );
@@ -931,35 +1021,26 @@ function GraphLegend() {
 
   return (
     <div className="absolute left-4 top-[4.7rem] z-20 hidden max-w-[390px] rounded-xl border border-white/[0.06] bg-slate-950/75 px-3 py-2.5 backdrop-blur md:block">
-
       <div className="flex flex-wrap gap-x-3 gap-y-2">
+        {visibleTypes.map((type) => {
+          const style = NODE_STYLES[type];
 
-        {visibleTypes.map(
-          (type) => {
-            const style =
-              NODE_STYLES[type];
+          return (
+            <div
+              key={type}
+              className="flex items-center gap-1.5"
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${style.dot}`}
+              />
 
-            return (
-              <div
-                key={type}
-                className="flex items-center gap-1.5"
-              >
-                <span
-                  className={`h-2 w-2 rounded-full ${style.dot}`}
-                />
-
-                <span className="text-[8px] text-slate-600">
-                  {formatNodeType(
-                    type
-                  )}
-                </span>
-              </div>
-            );
-          }
-        )}
-
+              <span className="text-[8px] text-slate-600">
+                {formatNodeType(type)}
+              </span>
+            </div>
+          );
+        })}
       </div>
-
     </div>
   );
 }
@@ -979,56 +1060,28 @@ function GraphCanvas({
   const width = 1200;
   const height = 680;
 
-  const [pan, setPan] = useState({
-    x: 0,
-    y: 0,
-  });
-
-  const [dragging, setDragging] =
-    useState(false);
-
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
   const dragStart = useRef(null);
 
-  // --------------------------------------------------
-  // Build graph-aware positions
-  // --------------------------------------------------
-
   const positionedNodes = useMemo(
-    () =>
-      calculateGraphLayout(
-        nodes,
-        edges,
-        width,
-        height
-      ),
+    () => calculateGraphLayout(nodes, edges, width, height),
     [nodes, edges]
   );
 
   const nodeMap = useMemo(
     () =>
       Object.fromEntries(
-        positionedNodes.map(
-          (node) => [
-            String(node.id),
-            node,
-          ]
-        )
+        positionedNodes.map((node) => [
+          String(node.id),
+          node,
+        ])
       ),
     [positionedNodes]
   );
 
-  // --------------------------------------------------
-  // Pointer handling
-  // --------------------------------------------------
-
-  const handlePointerDown = (
-    event
-  ) => {
-    if (
-      event.target.closest(
-        "[data-graph-node]"
-      )
-    ) {
+  const handlePointerDown = (event) => {
+    if (event.target.closest("[data-graph-node]")) {
       return;
     }
 
@@ -1040,27 +1093,22 @@ function GraphCanvas({
       panX: pan.x,
       panY: pan.y,
     };
+
+    event.currentTarget.setPointerCapture?.(event.pointerId);
   };
 
-  const handlePointerMove = (
-    event
-  ) => {
-    if (
-      !dragging ||
-      !dragStart.current
-    ) {
+  const handlePointerMove = (event) => {
+    if (!dragging || !dragStart.current) {
       return;
     }
 
     setPan({
       x:
         dragStart.current.panX +
-        (event.clientX -
-          dragStart.current.clientX),
+        (event.clientX - dragStart.current.clientX),
       y:
         dragStart.current.panY +
-        (event.clientY -
-          dragStart.current.clientY),
+        (event.clientY - dragStart.current.clientY),
     });
   };
 
@@ -1073,24 +1121,15 @@ function GraphCanvas({
     <div
       data-kg-canvas
       className={`absolute inset-0 overflow-hidden ${
-        dragging
-          ? "cursor-grabbing"
-          : "cursor-grab"
+        dragging ? "cursor-grabbing" : "cursor-grab"
       }`}
-      onPointerDown={
-        handlePointerDown
-      }
-      onPointerMove={
-        handlePointerMove
-      }
-      onPointerUp={
-        stopDragging
-      }
-      onPointerLeave={
-        stopDragging
-      }
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={stopDragging}
+      onPointerCancel={stopDragging}
+      onLostPointerCapture={stopDragging}
+      onPointerLeave={stopDragging}
     >
-
       <svg
         viewBox={`0 0 ${width} ${height}`}
         className="h-full w-full select-none"
@@ -1098,16 +1137,13 @@ function GraphCanvas({
           transform: `translate(${pan.x / 2}px, ${
             pan.y / 2
           }px) scale(${zoom})`,
-          transformOrigin:
-            "center",
+          transformOrigin: "center",
           transition: dragging
             ? "none"
             : "transform 180ms ease",
         }}
       >
-
         <defs>
-
           <pattern
             id="graph-grid"
             width="32"
@@ -1150,13 +1186,11 @@ function GraphCanvas({
               stdDeviation="4"
               result="blur"
             />
-
             <feMerge>
               <feMergeNode in="blur" />
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
-
         </defs>
 
         <rect
@@ -1166,394 +1200,206 @@ function GraphCanvas({
           className="text-white"
         />
 
-        {/* ==================================================
-            Edges
-        ================================================== */}
+        {/* Edges */}
 
-        {edges.map(
-          (edge, index) => {
-            const source =
-              nodeMap[
-                String(
-                  edge.source
-                )
-              ];
+        {edges.map((edge, index) => {
+          const source = nodeMap[String(edge.source)];
+          const target = nodeMap[String(edge.target)];
 
-            const target =
-              nodeMap[
-                String(
-                  edge.target
-                )
-              ];
-
-            if (
-              !source ||
-              !target
-            ) {
-              return null;
-            }
-
-            const edgeConnected =
-              selectedNode &&
-              (
-                String(
-                  edge.source
-                ) ===
-                  String(
-                    selectedNode.id
-                  ) ||
-                String(
-                  edge.target
-                ) ===
-                  String(
-                    selectedNode.id
-                  )
-              );
-
-            const edgeOpacity =
-              selectedNode
-                ? edgeConnected
-                  ? 0.78
-                  : 0.08
-                : 0.34;
-
-            const path =
-              buildCurvedEdgePath(
-                source,
-                target
-              );
-
-            const midpoint =
-              getEdgeMidpoint(
-                source,
-                target
-              );
-
-            return (
-              <g
-                key={`${edge.source}-${edge.target}-${edge.relationship}-${index}`}
-                pointerEvents="none"
-              >
-
-                <path
-                  d={path}
-                  fill="none"
-                  stroke="#818cf8"
-                  strokeOpacity={
-                    edgeOpacity
-                  }
-                  strokeWidth={
-                    edgeConnected
-                      ? 2
-                      : 1.25
-                  }
-                  markerEnd="url(#graph-arrow)"
-                  className="transition-all duration-200"
-                />
-
-                {edge.relationship && (
-                  <g
-                    opacity={
-                      selectedNode
-                        ? edgeConnected
-                          ? 1
-                          : 0.15
-                        : 0.85
-                    }
-                  >
-
-                    <rect
-                      x={
-                        midpoint.x -
-                        48
-                      }
-                      y={
-                        midpoint.y -
-                        10
-                      }
-                      width="96"
-                      height="20"
-                      rx="6"
-                      fill="#020617"
-                      fillOpacity="0.88"
-                      stroke="#ffffff"
-                      strokeOpacity="0.05"
-                    />
-
-                    <text
-                      x={
-                        midpoint.x
-                      }
-                      y={
-                        midpoint.y +
-                        3
-                      }
-                      textAnchor="middle"
-                      fill="#94a3b8"
-                      fontSize="8"
-                    >
-                      {formatRelationship(
-                        edge.relationship
-                      )}
-                    </text>
-
-                  </g>
-                )}
-
-              </g>
-            );
+          if (!source || !target) {
+            return null;
           }
-        )}
 
-        {/* ==================================================
-            Nodes
-        ================================================== */}
+          const edgeConnected =
+            selectedNode &&
+            (
+              String(edge.source) === String(selectedNode.id) ||
+              String(edge.target) === String(selectedNode.id)
+            );
 
-        {positionedNodes.map(
-          (node) => {
-            const selected =
-              String(
-                selectedNode?.id
-              ) ===
-              String(node.id);
+          const edgeOpacity = selectedNode
+            ? edgeConnected
+              ? 0.78
+              : 0.08
+            : 0.34;
 
-            const highlighted =
-              !selectedNode ||
-              selected ||
-              selectedNeighborhood?.has(
-                String(node.id)
-              );
+          const path = buildCurvedEdgePath(source, target);
+          const midpoint = getEdgeMidpoint(source, target);
 
-            const style =
-              NODE_STYLES[
-                node.type
-              ] ||
-              NODE_STYLES.concept;
+          return (
+            <g
+              key={`${edge.source}-${edge.target}-${edge.relationship}-${index}`}
+              pointerEvents="none"
+            >
+              <path
+                d={path}
+                fill="none"
+                stroke="#818cf8"
+                strokeOpacity={edgeOpacity}
+                strokeWidth={edgeConnected ? 2 : 1.25}
+                markerEnd="url(#graph-arrow)"
+                className="transition-all duration-200"
+              />
 
-            const radius =
-              getNodeRadius(
-                node,
-                edges
-              );
+              {edge.relationship && (
+                <g
+                  opacity={
+                    selectedNode
+                      ? edgeConnected
+                        ? 1
+                        : 0.15
+                      : 0.85
+                  }
+                >
+                  <rect
+                    x={midpoint.x - 48}
+                    y={midpoint.y - 10}
+                    width="96"
+                    height="20"
+                    rx="6"
+                    fill="#020617"
+                    fillOpacity="0.88"
+                    stroke="#ffffff"
+                    strokeOpacity="0.05"
+                  />
 
-            return (
-              <g
-                key={node.id}
-                data-graph-node
-                transform={`translate(${node.x}, ${node.y})`}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onSelect(node);
-                }}
-                className="cursor-pointer"
-                opacity={
-                  highlighted
-                    ? 1
-                    : 0.18
-                }
-              >
+                  <text
+                    x={midpoint.x}
+                    y={midpoint.y + 3}
+                    textAnchor="middle"
+                    fill="#94a3b8"
+                    fontSize="8"
+                  >
+                    {formatRelationship(edge.relationship)}
+                  </text>
+                </g>
+              )}
+            </g>
+          );
+        })}
 
-                {/* Shared-node halo */}
+        {/* Nodes */}
 
-                {node.type !==
-                  "paper" &&
-                  getNodeDegree(
-                    node.id,
-                    edges
-                  ) >= 2 && (
-                    <circle
-                      r={
-                        radius +
-                        8
-                      }
-                      fill={
-                        style.hex
-                      }
-                      fillOpacity="0.035"
-                      stroke={
-                        style.hex
-                      }
-                      strokeOpacity="0.12"
-                      strokeWidth="1"
-                    />
-                  )}
+        {positionedNodes.map((node) => {
+          const selected =
+            String(selectedNode?.id) === String(node.id);
 
-                {/* Selected halo */}
+          const highlighted =
+            !selectedNode ||
+            selected ||
+            selectedNeighborhood?.has(String(node.id));
 
-                {selected && (
+          const style =
+            NODE_STYLES[node.type] || NODE_STYLES.concept;
+
+          const radius = getNodeRadius(node, edges);
+
+          return (
+            <g
+              key={node.id}
+              data-graph-node
+              transform={`translate(${node.x}, ${node.y})`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onSelect(node);
+              }}
+              className="cursor-pointer"
+              opacity={highlighted ? 1 : 0.18}
+            >
+              {node.type !== "paper" &&
+                getNodeDegree(node.id, edges) >= 2 && (
                   <circle
-                    r={
-                      radius +
-                      10
-                    }
-                    fill="none"
-                    stroke="#818cf8"
-                    strokeOpacity="0.45"
+                    r={radius + 8}
+                    fill={style.hex}
+                    fillOpacity="0.035"
+                    stroke={style.hex}
+                    strokeOpacity="0.12"
                     strokeWidth="1"
-                    filter="url(#node-glow)"
                   />
                 )}
 
-                {/* Main node */}
-
+              {selected && (
                 <circle
-                  r={radius}
-                  fill="#020617"
-                  fillOpacity={
-                    node.type ===
-                    "paper"
-                      ? 0.95
-                      : 0.88
-                  }
-                  stroke={
-                    style.hex
-                  }
-                  strokeOpacity={
-                    selected
-                      ? 1
-                      : 0.65
-                  }
-                  strokeWidth={
-                    selected
-                      ? 2.4
-                      : node.type ===
-                        "paper"
+                  r={radius + 10}
+                  fill="none"
+                  stroke="#818cf8"
+                  strokeOpacity="0.45"
+                  strokeWidth="1"
+                  filter="url(#node-glow)"
+                />
+              )}
+
+              <circle
+                r={radius}
+                fill="#020617"
+                fillOpacity={node.type === "paper" ? 0.95 : 0.88}
+                stroke={style.hex}
+                strokeOpacity={selected ? 1 : 0.65}
+                strokeWidth={
+                  selected
+                    ? 2.4
+                    : node.type === "paper"
                       ? 2
                       : 1.4
-                  }
-                />
+                }
+              />
 
-                {/* Inner tint */}
+              <circle
+                r={radius - 2}
+                fill={style.hex}
+                fillOpacity={node.type === "paper" ? 0.12 : 0.06}
+              />
 
-                <circle
-                  r={
-                    radius -
-                    2
-                  }
-                  fill={
-                    style.hex
-                  }
-                  fillOpacity={
-                    node.type ===
-                    "paper"
-                      ? 0.12
-                      : 0.06
-                  }
-                />
+              <circle
+                r={node.type === "paper" ? 6 : 4.5}
+                fill={style.hex}
+                fillOpacity="0.9"
+              />
 
-                {/* Node center */}
-
-                <circle
-                  r={
-                    node.type ===
-                    "paper"
-                      ? 6
-                      : 4.5
-                  }
-                  fill={
-                    style.hex
-                  }
-                  fillOpacity="0.9"
-                />
-
-                {/* Degree indicator */}
-
-                {getNodeDegree(
-                  node.id,
-                  edges
-                ) > 1 && (
-                  <text
-                    x={
-                      radius -
-                      2
-                    }
-                    y={
-                      -radius +
-                      4
-                    }
-                    textAnchor="end"
-                    fill="#64748b"
-                    fontSize="7"
-                  >
-                    {getNodeDegree(
-                      node.id,
-                      edges
-                    )}
-                  </text>
-                )}
-
-                {/* Label */}
-
+              {getNodeDegree(node.id, edges) > 1 && (
                 <text
-                  y={
-                    radius +
-                    18
-                  }
-                  textAnchor="middle"
-                  fill={
-                    selected
-                      ? "#e2e8f0"
-                      : "#cbd5e1"
-                  }
-                  fontSize={
-                    node.type ===
-                    "paper"
-                      ? 10
-                      : 9
-                  }
-                  fontWeight={
-                    node.type ===
-                    "paper"
-                      ? 600
-                      : 400
-                  }
-                >
-                  {truncate(
-                    node.name,
-                    node.type ===
-                      "paper"
-                      ? 30
-                      : 25
-                  )}
-                </text>
-
-                {/* Type */}
-
-                <text
-                  y={
-                    radius +
-                    31
-                  }
-                  textAnchor="middle"
-                  fill={
-                    style.hex
-                  }
-                  fillOpacity="0.85"
+                  x={radius - 2}
+                  y={-radius + 4}
+                  textAnchor="end"
+                  fill="#64748b"
                   fontSize="7"
                 >
-                  {formatNodeType(
-                    node.type
-                  )}
+                  {getNodeDegree(node.id, edges)}
                 </text>
+              )}
 
-              </g>
-            );
-          }
-        )}
+              <text
+                y={radius + 18}
+                textAnchor="middle"
+                fill={selected ? "#e2e8f0" : "#cbd5e1"}
+                fontSize={node.type === "paper" ? 10 : 9}
+                fontWeight={node.type === "paper" ? 600 : 400}
+              >
+                {truncate(
+                  node.name,
+                  node.type === "paper" ? 30 : 25
+                )}
+              </text>
 
+              <text
+                y={radius + 31}
+                textAnchor="middle"
+                fill={style.hex}
+                fillOpacity="0.85"
+                fontSize="7"
+              >
+                {formatNodeType(node.type)}
+              </text>
+            </g>
+          );
+        })}
       </svg>
 
-      {/* Canvas hint */}
-
       <div className="pointer-events-none absolute bottom-[4.7rem] left-5 rounded-lg border border-white/[0.05] bg-slate-950/70 px-2.5 py-1.5 backdrop-blur">
-
         <p className="text-[9px] text-slate-700">
-          Drag to explore · Click an entity
-          · Shared nodes connect research sources
+          Drag to explore · Click an entity · Shared nodes connect research sources
         </p>
-
       </div>
-
     </div>
   );
 }
@@ -1562,32 +1408,18 @@ function GraphCanvas({
 // Graph Layout
 // ======================================================
 
-function calculateGraphLayout(
-  nodes,
-  edges,
-  width,
-  height
-) {
+function calculateGraphLayout(nodes, edges, width, height) {
   if (nodes.length === 0) {
     return [];
   }
 
   if (nodes.length === 1) {
-    return [
-      {
-        ...nodes[0],
-        x: width / 2,
-        y: height / 2,
-      },
-    ];
+    return [{
+      ...nodes[0],
+      x: width / 2,
+      y: height / 2,
+    }];
   }
-
-  const nodeMap = new Map(
-    nodes.map((node) => [
-      String(node.id),
-      node,
-    ])
-  );
 
   const degree = {};
 
@@ -1596,366 +1428,164 @@ function calculateGraphLayout(
   });
 
   edges.forEach((edge) => {
-    if (
-      degree[
-        String(edge.source)
-      ] !== undefined
-    ) {
-      degree[
-        String(edge.source)
-      ] += 1;
+    if (degree[String(edge.source)] !== undefined) {
+      degree[String(edge.source)] += 1;
     }
 
-    if (
-      degree[
-        String(edge.target)
-      ] !== undefined
-    ) {
-      degree[
-        String(edge.target)
-      ] += 1;
+    if (degree[String(edge.target)] !== undefined) {
+      degree[String(edge.target)] += 1;
     }
   });
 
-  // --------------------------------------------------
-  // Initial semantic placement
-  //
-  // Papers form the outer research context.
-  // Highly connected non-paper entities begin closer
-  // to the center.
-  // --------------------------------------------------
-
-  const papers = nodes.filter(
-    (node) =>
-      node.type === "paper"
-  );
-
-  const entities = nodes.filter(
-    (node) =>
-      node.type !== "paper"
-  );
-
+  const papers = nodes.filter((node) => node.type === "paper");
+  const entities = nodes.filter((node) => node.type !== "paper");
   const positions = {};
 
-  const paperRadius =
-    Math.min(
-      255,
-      150 +
-        papers.length * 22
+  const paperRadius = Math.min(
+    255,
+    150 + papers.length * 22
+  );
+
+  papers.forEach((paper, index) => {
+    const angle =
+      (index / Math.max(papers.length, 1)) * Math.PI * 2 -
+      Math.PI / 2;
+
+    positions[String(paper.id)] = {
+      x: width / 2 + Math.cos(angle) * paperRadius,
+      y: height / 2 + Math.sin(angle) * paperRadius,
+    };
+  });
+
+  const maxDegree = Math.max(
+    ...entities.map((node) => degree[String(node.id)] || 0),
+    1
+  );
+
+  entities.forEach((node, index) => {
+    const nodeDegree = degree[String(node.id)] || 0;
+    const connectivity = nodeDegree / maxDegree;
+
+    const radialDistance =
+      95 + (1 - connectivity) * 175;
+
+    const angle = stableAngle(
+      node.id,
+      index,
+      entities.length
     );
 
-  papers.forEach(
-    (paper, index) => {
-      const angle =
-        (index /
-          Math.max(
-            papers.length,
-            1
-          )) *
-          Math.PI *
-          2 -
-        Math.PI / 2;
+    positions[String(node.id)] = {
+      x: width / 2 + Math.cos(angle) * radialDistance,
+      y: height / 2 + Math.sin(angle) * radialDistance,
+    };
+  });
 
-      positions[
-        String(paper.id)
-      ] = {
-        x:
-          width / 2 +
-          Math.cos(angle) *
-            paperRadius,
-        y:
-          height / 2 +
-          Math.sin(angle) *
-            paperRadius,
-      };
-    }
-  );
+  const result = nodes.map((node) => ({
+    ...node,
+    x: positions[String(node.id)]?.x ?? width / 2,
+    y: positions[String(node.id)]?.y ?? height / 2,
+  }));
 
-  const maxDegree =
-    Math.max(
-      ...entities.map(
-        (node) =>
-          degree[
-            String(node.id)
-          ] || 0
-      ),
-      1
-    );
-
-  entities.forEach(
-    (node, index) => {
-      const nodeDegree =
-        degree[
-          String(node.id)
-        ] || 0;
-
-      const connectivity =
-        nodeDegree /
-        maxDegree;
-
-      const radialDistance =
-        95 +
-        (1 -
-          connectivity) *
-          175;
-
-      const angle =
-        stableAngle(
-          node.id,
-          index,
-          entities.length
-        );
-
-      positions[
-        String(node.id)
-      ] = {
-        x:
-          width / 2 +
-          Math.cos(angle) *
-            radialDistance,
-        y:
-          height / 2 +
-          Math.sin(angle) *
-            radialDistance,
-      };
-    }
-  );
-
-  // --------------------------------------------------
-  // Lightweight force relaxation
-  //
-  // This makes connected nodes attract one another
-  // while unrelated nodes repel each other.
-  // --------------------------------------------------
-
-  const result = nodes.map(
-    (node) => ({
-      ...node,
-      x:
-        positions[
-          String(node.id)
-        ]?.x ??
-        width / 2,
-      y:
-        positions[
-          String(node.id)
-        ]?.y ??
-        height / 2,
-    })
-  );
-
-  const iterations =
-    nodes.length > 45
-      ? 24
-      : 36;
+  const iterations = nodes.length > 45 ? 24 : 36;
 
   const nodeIndex = new Map(
-    result.map(
-      (node, index) => [
-        String(node.id),
-        index,
-      ]
-    )
+    result.map((node, index) => [
+      String(node.id),
+      index,
+    ])
   );
 
-  for (
-    let iteration = 0;
-    iteration < iterations;
-    iteration++
-  ) {
-    const forces = result.map(
-      () => ({
-        x: 0,
-        y: 0,
-      })
-    );
+  for (let iteration = 0; iteration < iterations; iteration++) {
+    const forces = result.map(() => ({ x: 0, y: 0 }));
 
     // Repulsion
-    for (
-      let i = 0;
-      i < result.length;
-      i++
-    ) {
-      for (
-        let j = i + 1;
-        j < result.length;
-        j++
-      ) {
+    for (let i = 0; i < result.length; i++) {
+      for (let j = i + 1; j < result.length; j++) {
         const a = result[i];
         const b = result[j];
 
         let dx = b.x - a.x;
         let dy = b.y - a.y;
 
-        let distance =
-          Math.sqrt(
-            dx * dx +
-              dy * dy
-          );
+        let distance = Math.sqrt(dx * dx + dy * dy);
 
-        if (
-          distance < 0.01
-        ) {
+        if (distance < 0.01) {
           dx = 1;
           dy = 0;
           distance = 1;
         }
 
         const minDistance =
-          a.type ===
-            "paper" ||
-          b.type ===
-            "paper"
+          a.type === "paper" || b.type === "paper"
             ? 110
             : 78;
 
         const strength =
-          Math.max(
-            0,
-            minDistance -
-              distance
-          ) * 0.018;
+          Math.max(0, minDistance - distance) * 0.018;
 
-        const nx =
-          dx / distance;
+        const nx = dx / distance;
+        const ny = dy / distance;
 
-        const ny =
-          dy / distance;
+        forces[i].x -= nx * strength;
+        forces[i].y -= ny * strength;
 
-        forces[i].x -=
-          nx * strength;
-
-        forces[i].y -=
-          ny * strength;
-
-        forces[j].x +=
-          nx * strength;
-
-        forces[j].y +=
-          ny * strength;
+        forces[j].x += nx * strength;
+        forces[j].y += ny * strength;
       }
     }
 
     // Edge attraction
-    edges.forEach(
-      (edge) => {
-        const sourceIndex =
-          nodeIndex.get(
-            String(
-              edge.source
-            )
-          );
+    edges.forEach((edge) => {
+      const sourceIndex = nodeIndex.get(String(edge.source));
+      const targetIndex = nodeIndex.get(String(edge.target));
 
-        const targetIndex =
-          nodeIndex.get(
-            String(
-              edge.target
-            )
-          );
-
-        if (
-          sourceIndex ===
-            undefined ||
-          targetIndex ===
-            undefined
-        ) {
-          return;
-        }
-
-        const source =
-          result[sourceIndex];
-
-        const target =
-          result[targetIndex];
-
-        let dx =
-          target.x -
-          source.x;
-
-        let dy =
-          target.y -
-          source.y;
-
-        const distance =
-          Math.max(
-            1,
-            Math.sqrt(
-              dx * dx +
-                dy * dy
-            )
-          );
-
-        const desired =
-          source.type ===
-            "paper" ||
-          target.type ===
-            "paper"
-            ? 165
-            : 135;
-
-        const strength =
-          (distance -
-            desired) *
-          0.008;
-
-        dx /= distance;
-        dy /= distance;
-
-        forces[
-          sourceIndex
-        ].x +=
-          dx * strength;
-
-        forces[
-          sourceIndex
-        ].y +=
-          dy * strength;
-
-        forces[
-          targetIndex
-        ].x -=
-          dx * strength;
-
-        forces[
-          targetIndex
-        ].y -=
-          dy * strength;
+      if (
+        sourceIndex === undefined ||
+        targetIndex === undefined
+      ) {
+        return;
       }
-    );
+
+      const source = result[sourceIndex];
+      const target = result[targetIndex];
+
+      let dx = target.x - source.x;
+      let dy = target.y - source.y;
+
+      const distance = Math.max(
+        1,
+        Math.sqrt(dx * dx + dy * dy)
+      );
+
+      const desired =
+        source.type === "paper" || target.type === "paper"
+          ? 165
+          : 135;
+
+      const strength = (distance - desired) * 0.008;
+
+      dx /= distance;
+      dy /= distance;
+
+      forces[sourceIndex].x += dx * strength;
+      forces[sourceIndex].y += dy * strength;
+
+      forces[targetIndex].x -= dx * strength;
+      forces[targetIndex].y -= dy * strength;
+    });
 
     // Apply forces
-    result.forEach(
-      (node, index) => {
-        const damping =
-          0.82;
+    result.forEach((node, index) => {
+      const damping = 0.82;
 
-        node.x +=
-          forces[index].x *
-          damping;
+      node.x += forces[index].x * damping;
+      node.y += forces[index].y * damping;
 
-        node.y +=
-          forces[index].y *
-          damping;
-
-        // Keep graph inside canvas.
-        node.x = clamp(
-          node.x,
-          65,
-          width - 65
-        );
-
-        node.y = clamp(
-          node.y,
-          75,
-          height - 75
-        );
-      }
-    );
+      node.x = clamp(node.x, 65, width - 65);
+      node.y = clamp(node.y, 75, height - 75);
+    });
   }
-
-  // --------------------------------------------------
-  // Prevent extreme overlap between labels
-  // --------------------------------------------------
 
   return result;
 }
@@ -1964,55 +1594,26 @@ function calculateGraphLayout(
 // Edge Geometry
 // ======================================================
 
-function buildCurvedEdgePath(
-  source,
-  target
-) {
-  const dx =
-    target.x - source.x;
+function buildCurvedEdgePath(source, target) {
+  const dx = target.x - source.x;
+  const dy = target.y - source.y;
 
-  const dy =
-    target.y - source.y;
-
-  const distance =
-    Math.sqrt(
-      dx * dx +
-        dy * dy
-    );
+  const distance = Math.sqrt(dx * dx + dy * dy);
 
   if (distance < 1) {
     return `M ${source.x} ${source.y} L ${target.x} ${target.y}`;
   }
 
-  const normalX =
-    -dy / distance;
+  const normalX = -dy / distance;
+  const normalY = dx / distance;
 
-  const normalY =
-    dx / distance;
+  const curve = Math.min(45, distance * 0.12);
 
-  const curve =
-    Math.min(
-      45,
-      distance * 0.12
-    );
+  const midpointX = (source.x + target.x) / 2;
+  const midpointY = (source.y + target.y) / 2;
 
-  const midpointX =
-    (source.x +
-      target.x) /
-    2;
-
-  const midpointY =
-    (source.y +
-      target.y) /
-    2;
-
-  const controlX =
-    midpointX +
-    normalX * curve;
-
-  const controlY =
-    midpointY +
-    normalY * curve;
+  const controlX = midpointX + normalX * curve;
+  const controlY = midpointY + normalY * curve;
 
   return `
     M ${source.x} ${source.y}
@@ -2021,19 +1622,10 @@ function buildCurvedEdgePath(
   `;
 }
 
-function getEdgeMidpoint(
-  source,
-  target
-) {
+function getEdgeMidpoint(source, target) {
   return {
-    x:
-      (source.x +
-        target.x) /
-      2,
-    y:
-      (source.y +
-        target.y) /
-      2,
+    x: (source.x + target.x) / 2,
+    y: (source.y + target.y) / 2,
   };
 }
 
@@ -2041,93 +1633,61 @@ function getEdgeMidpoint(
 // Entity Details
 // ======================================================
 
-function EntityDetails({
-  node,
-  edges,
-  nodes,
-  papers,
-}) {
+function EntityDetails({ node, edges, nodes, papers }) {
   const related = edges
     .filter(
       (edge) =>
-        String(edge.source) ===
-          String(node.id) ||
-        String(edge.target) ===
-          String(node.id)
+        String(edge.source) === String(node.id) ||
+        String(edge.target) === String(node.id)
     )
     .map((edge) => {
       const outgoing =
-        String(edge.source) ===
-        String(node.id);
+        String(edge.source) === String(node.id);
 
       const otherId = outgoing
         ? edge.target
         : edge.source;
 
       const other = nodes.find(
-        (item) =>
-          String(item.id) ===
-          String(otherId)
+        (item) => String(item.id) === String(otherId)
       );
 
       return {
         ...edge,
         other,
-        direction: outgoing
-          ? "outgoing"
-          : "incoming",
+        direction: outgoing ? "outgoing" : "incoming",
       };
     })
-    .filter(
-      (item) => item.other
-    );
+    .filter((item) => item.other);
 
   const style =
-    NODE_STYLES[node.type] ||
-    NODE_STYLES.concept;
+    NODE_STYLES[node.type] || NODE_STYLES.concept;
 
-  const sourceIds =
-    Array.isArray(
-      node.resource_ids
-    )
-      ? node.resource_ids
-      : [];
+  const sourceIds = Array.isArray(node.resource_ids)
+    ? node.resource_ids
+    : [];
 
-  const sourcePapers =
-    sourceIds.map(
-      (resourceId) =>
-        papers.find(
-          (paper) =>
-            String(
-              paper.id
-            ) ===
-            String(
-              resourceId
-            )
-        ) || {
-          id: resourceId,
-          title:
-            "Research source",
-        }
-    );
+  const sourcePapers = sourceIds.map((resourceId) =>
+    papers.find(
+      (paper) => String(paper.id) === String(resourceId)
+    ) || {
+      id: String(resourceId),
+      title: "Research source",
+    }
+  );
 
   return (
     <div className="max-h-[calc(100vh-13rem)] overflow-y-auto p-5">
-
       {/* Identity */}
 
       <div className="flex items-start gap-3">
-
         <div
           className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${style.stroke} ${style.fill}`}
         >
-          <Network
-            className={`h-5 w-5 ${style.text}`}
-          />
+          <Network className={`h-5 w-5 ${style.text}`} />
         </div>
 
         <div className="min-w-0">
-
           <p className="break-words text-sm font-medium text-slate-200">
             {node.name}
           </p>
@@ -2135,239 +1695,149 @@ function EntityDetails({
           <p
             className={`mt-1 text-[10px] uppercase tracking-wide ${style.text}`}
           >
-            {formatNodeType(
-              node.type
-            )}
+            {formatNodeType(node.type)}
           </p>
-
         </div>
-
       </div>
 
       {/* Graph role */}
 
       <div className="mt-4 grid grid-cols-2 gap-2">
-
-        <MiniStat
-          label="Connections"
-          value={related.length}
-        />
-
-        <MiniStat
-          label="Sources"
-          value={
-            sourceIds.length
-          }
-        />
-
+        <MiniStat label="Connections" value={related.length} />
+        <MiniStat label="Sources" value={sourceIds.length} />
       </div>
 
       {/* Description */}
 
       {node.description && (
         <DetailSection title="Description">
-
           <p className="text-xs leading-5 text-slate-500">
             {node.description}
           </p>
-
         </DetailSection>
       )}
 
       {/* Relationships */}
 
       <DetailSection title="Relationships">
-
         {related.length === 0 ? (
           <div className="rounded-xl border border-white/[0.05] bg-slate-900/30 p-3">
-
             <p className="text-xs text-slate-600">
-              No validated relationships
-              are associated with this
-              entity.
+              No validated relationships are associated with this entity.
             </p>
-
           </div>
         ) : (
           <div className="space-y-2">
+            {related.map((item, index) => (
+              <div
+                key={`${item.other.id}-${index}`}
+                className="rounded-xl border border-white/[0.05] bg-slate-900/40 p-3"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[9px] uppercase tracking-wide text-indigo-400">
+                    {formatRelationship(item.relationship)}
+                  </span>
 
-            {related.map(
-              (item, index) => (
-                <div
-                  key={`${item.other.id}-${index}`}
-                  className="rounded-xl border border-white/[0.05] bg-slate-900/40 p-3"
-                >
-
-                  <div className="flex items-center justify-between gap-2">
-
-                    <span className="text-[9px] uppercase tracking-wide text-indigo-400">
-                      {formatRelationship(
-                        item.relationship
-                      )}
-                    </span>
-
-                    <span className="text-[8px] text-slate-700">
-                      {item.direction}
-                    </span>
-
-                  </div>
-
-                  <p className="mt-1 break-words text-xs text-slate-400">
-                    {item.other.name}
-                  </p>
-
-                  <p className="mt-1 text-[9px] capitalize text-slate-700">
-                    {formatNodeType(
-                      item.other.type
-                    )}
-                  </p>
-
-                  {Array.isArray(
-                    item.resource_ids
-                  ) &&
-                    item
-                      .resource_ids
-                      .length >
-                      0 && (
-                      <p className="mt-2 text-[8px] text-slate-700">
-                        Supported by{" "}
-                        {
-                          item
-                            .resource_ids
-                            .length
-                        }{" "}
-                        source
-                        {item
-                          .resource_ids
-                          .length ===
-                        1
-                          ? ""
-                          : "s"}
-                      </p>
-                    )}
-
+                  <span className="text-[8px] text-slate-700">
+                    {item.direction}
+                  </span>
                 </div>
-              )
-            )}
 
+                <p className="mt-1 break-words text-xs text-slate-400">
+                  {item.other.name}
+                </p>
+
+                <p className="mt-1 text-[9px] capitalize text-slate-700">
+                  {formatNodeType(item.other.type)}
+                </p>
+
+                {Array.isArray(item.resource_ids) &&
+                  item.resource_ids.length > 0 && (
+                    <p className="mt-2 text-[8px] text-slate-700">
+                      Supported by {item.resource_ids.length} source
+                      {item.resource_ids.length === 1 ? "" : "s"}
+                    </p>
+                  )}
+              </div>
+            ))}
           </div>
         )}
-
       </DetailSection>
 
       {/* Evidence */}
 
-      {Array.isArray(
-        node.evidence
-      ) &&
-        node.evidence.length >
-          0 && (
+      {Array.isArray(node.evidence) &&
+        node.evidence.length > 0 && (
           <DetailSection title="Evidence">
-
             <div className="space-y-2">
+              {node.evidence.map((item, index) => (
+                <div
+                  key={`${item.chunk_index}-${index}`}
+                  className="rounded-xl border border-cyan-400/[0.08] bg-cyan-400/[0.025] p-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-3 w-3 text-cyan-400" />
 
-              {node.evidence.map(
-                (
-                  item,
-                  index
-                ) => (
-                  <div
-                    key={`${item.chunk_index}-${index}`}
-                    className="rounded-xl border border-cyan-400/[0.08] bg-cyan-400/[0.025] p-3"
-                  >
-
-                    <div className="flex items-center gap-2">
-
-                      <FileText className="h-3 w-3 text-cyan-400" />
-
-                      <span className="text-[9px] font-medium uppercase tracking-wide text-cyan-400">
-                        Chunk{" "}
-                        {item.chunk_index ??
-                          "—"}
-                      </span>
-
-                    </div>
-
-                    {item.statement && (
-                      <p className="mt-2 text-[10px] leading-5 text-slate-500">
-                        "{item.statement}"
-                      </p>
-                    )}
-
+                    <span className="text-[9px] font-medium uppercase tracking-wide text-cyan-400">
+                      Chunk {item.chunk_index ?? "—"}
+                    </span>
                   </div>
-                )
-              )}
 
+                  {item.statement && (
+                    <p className="mt-2 text-[10px] leading-5 text-slate-500">
+                      "{item.statement}"
+                    </p>
+                  )}
+                </div>
+              ))}
             </div>
-
           </DetailSection>
         )}
 
       {/* Source papers */}
 
       <DetailSection title="Source Papers">
-
-        {sourcePapers.length ===
-        0 ? (
+        {sourcePapers.length === 0 ? (
           <div className="rounded-xl border border-white/[0.05] bg-slate-900/40 p-3">
-
             <p className="text-[10px] text-slate-600">
-              No source paper metadata
-              is available.
+              No source paper metadata is available.
             </p>
-
           </div>
         ) : (
           <div className="space-y-2">
+            {sourcePapers.map((paper) => (
+              <div
+                key={paper.id}
+                className="rounded-xl border border-white/[0.05] bg-slate-900/40 p-3"
+              >
+                <div className="flex items-start gap-2">
+                  <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-400" />
 
-            {sourcePapers.map(
-              (paper) => (
-                <div
-                  key={paper.id}
-                  className="rounded-xl border border-white/[0.05] bg-slate-900/40 p-3"
-                >
+                  <div className="min-w-0">
+                    <p className="text-[9px] uppercase tracking-wide text-slate-700">
+                      Research source
+                    </p>
 
-                  <div className="flex items-start gap-2">
-
-                    <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-400" />
-
-                    <div className="min-w-0">
-
-                      <p className="text-[9px] uppercase tracking-wide text-slate-700">
-                        Research source
-                      </p>
-
-                      <p className="mt-1 break-words text-[10px] leading-4 text-slate-500">
-                        {paper.title}
-                      </p>
-
-                    </div>
-
+                    <p className="mt-1 break-words text-[10px] leading-4 text-slate-500">
+                      {paper.title}
+                    </p>
                   </div>
-
                 </div>
-              )
-            )}
-
+              </div>
+            ))}
           </div>
         )}
-
       </DetailSection>
 
       {/* Technical ID */}
 
       <DetailSection title="Graph Identity">
-
         <div className="rounded-xl border border-white/[0.05] bg-slate-900/40 p-3">
-
           <p className="break-all font-mono text-[9px] leading-4 text-slate-700">
             {node.id}
           </p>
-
         </div>
-
       </DetailSection>
-
     </div>
   );
 }
@@ -2376,21 +1846,14 @@ function EntityDetails({
 // Detail Section
 // ======================================================
 
-function DetailSection({
-  title,
-  children,
-}) {
+function DetailSection({ title, children }) {
   return (
     <div className="mt-6">
-
       <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-600">
         {title}
       </p>
 
-      <div className="mt-3">
-        {children}
-      </div>
-
+      <div className="mt-3">{children}</div>
     </div>
   );
 }
@@ -2399,13 +1862,9 @@ function DetailSection({
 // Mini Stat
 // ======================================================
 
-function MiniStat({
-  label,
-  value,
-}) {
+function MiniStat({ label, value }) {
   return (
     <div className="rounded-xl border border-white/[0.05] bg-slate-900/35 px-3 py-2">
-
       <p className="text-[8px] uppercase tracking-wide text-slate-700">
         {label}
       </p>
@@ -2413,7 +1872,6 @@ function MiniStat({
       <p className="mt-1 text-sm font-medium text-slate-400">
         {value}
       </p>
-
     </div>
   );
 }
@@ -2422,13 +1880,9 @@ function MiniStat({
 // Statistics
 // ======================================================
 
-function Stat({
-  label,
-  value,
-}) {
+function Stat({ label, value }) {
   return (
     <div className="flex items-center gap-2 rounded-lg border border-white/[0.05] bg-slate-950/40 px-3 py-2">
-
       <span className="text-[9px] uppercase tracking-wide text-slate-700">
         {label}
       </span>
@@ -2436,7 +1890,6 @@ function Stat({
       <span className="text-xs font-medium text-slate-400">
         {value}
       </span>
-
     </div>
   );
 }
@@ -2448,11 +1901,8 @@ function Stat({
 function GraphLoading() {
   return (
     <div className="flex h-full min-h-[620px] flex-col items-center justify-center">
-
       <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-indigo-400/10 bg-indigo-500/[0.05]">
-
         <Loader2 className="h-6 w-6 animate-spin text-indigo-400" />
-
       </div>
 
       <p className="mt-4 text-sm font-medium text-slate-300">
@@ -2460,11 +1910,9 @@ function GraphLoading() {
       </p>
 
       <p className="mt-2 max-w-sm text-center text-xs leading-5 text-slate-600">
-        Retrieving relevant research
-        evidence, extracting entities,
+        Retrieving relevant research evidence, extracting entities,
         and validating relationships.
       </p>
-
     </div>
   );
 }
@@ -2473,54 +1921,39 @@ function GraphLoading() {
 // Empty State
 // ======================================================
 
-function GraphEmpty({
-  hasSources,
-  hasGraph,
-  onGenerate,
-}) {
+function GraphEmpty({ hasSources, hasGraph, onGenerate }) {
   return (
     <div className="flex h-full min-h-[620px] flex-col items-center justify-center px-6 text-center">
-
       <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan-400/10 bg-cyan-400/[0.05]">
-
         <Network className="h-6 w-6 text-cyan-400" />
-
       </div>
 
       <h2 className="mt-5 text-sm font-medium text-slate-300">
-
         {!hasSources
           ? "No research sources selected"
           : hasGraph
-          ? "No matching entities"
-          : "Knowledge graph not generated"}
-
+            ? "No matching entities"
+            : "Knowledge graph not generated"}
       </h2>
 
       <p className="mt-2 max-w-md text-xs leading-5 text-slate-600">
-
         {!hasSources
           ? "Select research sources in your Research Notebook before generating a knowledge graph."
           : hasGraph
-          ? "Try changing the search query or entity type filter."
-          : "Generate a graph to explore evidence-grounded entities and relationships discovered across the selected research sources."}
-
+            ? "Try changing the search query or entity type filter."
+            : "Generate a graph to explore evidence-grounded entities and relationships discovered across the selected research sources."}
       </p>
 
-      {hasSources &&
-        !hasGraph && (
-          <button
-            type="button"
-            onClick={
-              onGenerate
-            }
-            className="mt-5 flex items-center gap-2 rounded-xl bg-indigo-500 px-4 py-2.5 text-xs font-medium text-white transition hover:bg-indigo-400"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Generate graph
-          </button>
-        )}
-
+      {hasSources && !hasGraph && (
+        <button
+          type="button"
+          onClick={onGenerate}
+          className="mt-5 flex items-center gap-2 rounded-xl bg-indigo-500 px-4 py-2.5 text-xs font-medium text-white transition hover:bg-indigo-400"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Generate graph
+        </button>
+      )}
     </div>
   );
 }
@@ -2529,171 +1962,82 @@ function GraphEmpty({
 // Graph Helpers
 // ======================================================
 
-function getNodeDegree(
-  nodeId,
-  edges
-) {
-  return edges.reduce(
-    (count, edge) => {
-      if (
-        String(
-          edge.source
-        ) === String(nodeId)
-      ) {
-        return count + 1;
-      }
+function getNodeDegree(nodeId, edges) {
+  return edges.reduce((count, edge) => {
+    if (
+      String(edge.source) === String(nodeId) ||
+      String(edge.target) === String(nodeId)
+    ) {
+      return count + 1;
+    }
 
-      if (
-        String(
-          edge.target
-        ) === String(nodeId)
-      ) {
-        return count + 1;
-      }
-
-      return count;
-    },
-    0
-  );
+    return count;
+  }, 0);
 }
 
-function getNodeRadius(
-  node,
-  edges
-) {
-  const degree =
-    getNodeDegree(
-      node.id,
-      edges
-    );
+function getNodeRadius(node, edges) {
+  const degree = getNodeDegree(node.id, edges);
 
-  if (
-    node.type ===
-    "paper"
-  ) {
-    return Math.min(
-      31,
-      25 + degree * 1.4
-    );
+  if (node.type === "paper") {
+    return Math.min(31, 25 + degree * 1.4);
   }
 
-  return Math.min(
-    24,
-    18 + degree * 1.1
-  );
+  return Math.min(24, 18 + degree * 1.1);
 }
 
-function stableAngle(
-  id,
-  index,
-  total
-) {
+function stableAngle(id, index, total) {
   const text = String(id);
-
   let hash = 0;
 
-  for (
-    let i = 0;
-    i < text.length;
-    i++
-  ) {
-    hash =
-      (hash * 31 +
-        text.charCodeAt(i)) |
-      0;
+  for (let i = 0; i < text.length; i++) {
+    hash = (hash * 31 + text.charCodeAt(i)) | 0;
   }
 
-  const normalized =
-    Math.abs(hash) /
-    2147483647;
+  const normalized = Math.abs(hash) / 2147483647;
 
   return (
-    (index / Math.max(total, 1)) *
-      Math.PI *
-      2 -
+    (index / Math.max(total, 1)) * Math.PI * 2 -
     Math.PI / 2 +
     normalized * 0.45
   );
 }
 
-function clamp(
-  value,
-  min,
-  max
-) {
-  return Math.max(
-    min,
-    Math.min(max, value)
-  );
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
 // ======================================================
 // Text Helpers
 // ======================================================
 
-function truncate(
-  value = "",
-  max = 24
-) {
-  const text =
-    String(value);
+function truncate(value = "", max = 24) {
+  const text = String(value);
 
-  if (
-    text.length <= max
-  ) {
+  if (text.length <= max) {
     return text;
   }
 
-  return `${text.slice(
-    0,
-    max
-  )}…`;
+  return `${text.slice(0, max)}…`;
 }
 
-function formatNodeType(
-  type = ""
-) {
-  if (
-    !type ||
-    type === "all"
-  ) {
-    return type ===
-      "all"
-      ? "All"
-      : "Entity";
+function formatNodeType(type = "") {
+  if (!type || type === "all") {
+    return type === "all" ? "All" : "Entity";
   }
 
   return String(type)
-    .replaceAll(
-      "_",
-      " "
-    )
-    .replace(
-      /\b\w/g,
-      (char) =>
-        char.toUpperCase()
-    );
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function formatRelationship(
-  relationship = ""
-) {
+function formatRelationship(relationship = "") {
   if (!relationship) {
     return "Related";
   }
 
-  return String(
-    relationship
-  )
-    .replaceAll(
-      "_",
-      " "
-    )
-    .replace(
-      /\b\w/g,
-      (char) =>
-        char.toUpperCase()
-    );
+  return String(relationship)
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 export default KnowledgeGraph;

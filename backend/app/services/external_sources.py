@@ -1,18 +1,40 @@
 import html
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional
 
 import requests
 
 
+# ============================================================
+# API CONFIGURATION
+# ============================================================
+
 SEMANTIC_SCHOLAR_URL = (
     "https://api.semanticscholar.org/graph/v1"
 )
 
-CROSSREF_URL = "https://api.crossref.org/v1"
+CROSSREF_URL = (
+    "https://api.crossref.org/v1"
+)
+
+OPENALEX_URL = (
+    "https://api.openalex.org"
+)
 
 REQUEST_TIMEOUT = 20
+
+PDF_VERIFY_TIMEOUT = 12
+
+MAX_PDF_SIZE = 20 * 1024 * 1024
+
+# Search substantially deeper than the final UI limit.
+SEARCH_MULTIPLIER = 5
+
+MAX_PROVIDER_RESULTS = 100
+
+PDF_VERIFY_WORKERS = 8
 
 SEMANTIC_SCHOLAR_API_KEY = os.getenv(
     "SEMANTIC_SCHOLAR_API_KEY"
@@ -20,23 +42,37 @@ SEMANTIC_SCHOLAR_API_KEY = os.getenv(
 
 CROSSREF_EMAIL = os.getenv(
     "CROSSREF_EMAIL",
-    ""
+    "",
+)
+
+OPENALEX_EMAIL = os.getenv(
+    "OPENALEX_EMAIL",
+    "",
 )
 
 
 # ============================================================
-# CONFIGURATION
+# SOURCE CONFIGURATION
 # ============================================================
 
 DEFAULT_SOURCES = [
     "semantic_scholar",
     "crossref",
+    "openalex",
 ]
 
 SUPPORTED_SOURCES = {
     "semantic_scholar",
     "crossref",
+    "openalex",
 }
+
+PDF_MAGIC = b"%PDF-"
+
+PDF_USER_AGENT = (
+    "SciBrain/1.0 "
+    "(academic research assistant)"
+)
 
 
 # ============================================================
@@ -44,9 +80,6 @@ SUPPORTED_SOURCES = {
 # ============================================================
 
 def _clean(value: Any) -> Optional[str]:
-    """
-    Convert a value to a clean optional string.
-    """
     if value is None:
         return None
 
@@ -56,13 +89,9 @@ def _clean(value: Any) -> Optional[str]:
 
 
 def _normalize_text(value: Any) -> str:
-    """
-    Normalize text for comparison/deduplication.
-    """
     value = _clean(value) or ""
 
     value = html.unescape(value)
-
     value = value.lower()
 
     value = re.sub(
@@ -80,10 +109,16 @@ def _normalize_text(value: Any) -> str:
     return value.strip()
 
 
+def _tokenize(value: Any) -> List[str]:
+    normalized = _normalize_text(value)
+
+    if not normalized:
+        return []
+
+    return normalized.split()
+
+
 def _clean_abstract(value: Any) -> Optional[str]:
-    """
-    Clean Crossref JATS/XML or HTML-like abstracts.
-    """
     value = _clean(value)
 
     if not value:
@@ -91,14 +126,12 @@ def _clean_abstract(value: Any) -> Optional[str]:
 
     value = html.unescape(value)
 
-    # Remove XML/HTML tags.
     value = re.sub(
         r"<[^>]+>",
         " ",
         value,
     )
 
-    # Remove common JATS entities.
     value = value.replace(
         "&nbsp;",
         " ",
@@ -106,7 +139,6 @@ def _clean_abstract(value: Any) -> Optional[str]:
 
     value = html.unescape(value)
 
-    # Normalize whitespace.
     value = re.sub(
         r"\s+",
         " ",
@@ -117,9 +149,6 @@ def _clean_abstract(value: Any) -> Optional[str]:
 
 
 def _normalize_year(value: Any) -> Optional[int]:
-    """
-    Normalize publication year.
-    """
     if value is None:
         return None
 
@@ -136,15 +165,12 @@ def _normalize_year(value: Any) -> Optional[int]:
 
 
 def _normalize_authors(
-    authors: Optional[List[Dict[str, Any]]]
+    authors: Optional[List[Dict[str, Any]]],
 ) -> List[Dict[str, Any]]:
-    """
-    Normalize Semantic Scholar-style authors.
-    """
+
     normalized = []
 
     for author in authors or []:
-
         if not isinstance(author, dict):
             continue
 
@@ -169,15 +195,12 @@ def _normalize_authors(
 
 
 def _normalize_crossref_authors(
-    authors: Optional[List[Dict[str, Any]]]
+    authors: Optional[List[Dict[str, Any]]],
 ) -> List[Dict[str, Any]]:
-    """
-    Normalize Crossref authors.
-    """
+
     normalized = []
 
     for author in authors or []:
-
         if not isinstance(author, dict):
             continue
 
@@ -215,23 +238,119 @@ def _normalize_crossref_authors(
     return normalized
 
 
-def _select_crossref_pdf(
-    item: Dict[str, Any],
+# ============================================================
+# OPENALEX ABSTRACT RECONSTRUCTION
+# ============================================================
+
+def _reconstruct_openalex_abstract(
+    inverted_index: Any,
 ) -> Optional[str]:
     """
-    Select the most likely PDF URL from Crossref links.
+    OpenAlex often stores abstracts as an inverted index.
 
-    Crossref's first link is not necessarily a PDF, so we
-    prefer links explicitly marked as application/pdf or
-    links whose URL ends in .pdf.
+    Example:
+
+        {
+            "retrieval": [0, 5],
+            "augmented": [1],
+            "generation": [2]
+        }
+
+    Reconstruct the original word order.
+    """
+
+    if not isinstance(
+        inverted_index,
+        dict,
+    ):
+        return None
+
+    positions = []
+
+    for word, indexes in inverted_index.items():
+        if not isinstance(indexes, list):
+            continue
+
+        for index in indexes:
+            try:
+                positions.append(
+                    (
+                        int(index),
+                        str(word),
+                    )
+                )
+            except (
+                TypeError,
+                ValueError,
+            ):
+                continue
+
+    if not positions:
+        return None
+
+    positions.sort(
+        key=lambda item: item[0]
+    )
+
+    return " ".join(
+        word
+        for _, word in positions
+    ).strip() or None
+
+
+# ============================================================
+# PDF URL NORMALIZATION
+# ============================================================
+
+def _add_pdf_candidate(
+    candidates: List[str],
+    url: Any,
+) -> None:
+
+    url = _clean(url)
+
+    if not url:
+        return
+
+    if not re.match(
+        r"^https?://",
+        url,
+        flags=re.IGNORECASE,
+    ):
+        return
+
+    key = url.lower()
+
+    if key not in {
+        item.lower()
+        for item in candidates
+    }:
+        candidates.append(url)
+
+
+# ============================================================
+# CROSSREF PDF CANDIDATES
+# ============================================================
+
+def _select_crossref_pdf_candidates(
+    item: Dict[str, Any],
+) -> List[str]:
+    """
+    Collect possible PDF URLs from Crossref.
+
+    Crossref metadata is not treated as proof of PDF
+    availability. Every candidate is verified later.
+
+    We now retain more plausible HTTPS links instead of
+    requiring Crossref to explicitly label the link
+    application/pdf.
     """
 
     links = item.get("link") or []
 
-    candidates = []
+    scored = []
 
     for link in links:
-
         if not isinstance(link, dict):
             continue
 
@@ -242,6 +361,13 @@ def _select_crossref_pdf(
         if not url:
             continue
 
+        if not re.match(
+            r"^https?://",
+            url,
+            flags=re.IGNORECASE,
+        ):
+            continue
+
         content_type = (
             _clean(
                 link.get("content-type")
@@ -249,54 +375,390 @@ def _select_crossref_pdf(
             or ""
         ).lower()
 
+        normalized_url = (
+            url.lower()
+            .split("?")[0]
+            .split("#")[0]
+        )
+
         score = 0
 
         if "application/pdf" in content_type:
+            score += 100
+
+        if normalized_url.endswith(".pdf"):
+            score += 80
+
+        if "pdf" in normalized_url:
+            score += 20
+
+        if "download" in normalized_url:
             score += 10
 
-        if url.lower().split("?")[0].endswith(
-            ".pdf"
-        ):
-            score += 5
+        if "fulltext" in normalized_url:
+            score += 10
 
-        candidates.append(
+        # Do not immediately reject every non-.pdf URL.
+        # Some publishers use article/download endpoints
+        # which return a PDF after a redirect.
+        if score == 0:
+            score = 1
+
+        scored.append(
             (
                 score,
                 url,
             )
         )
 
-    if not candidates:
-        return None
-
-    candidates.sort(
+    scored.sort(
         key=lambda item: item[0],
         reverse=True,
     )
 
-    best_score, best_url = candidates[0]
+    candidates = []
+    seen = set()
 
-    if best_score <= 0:
+    for _, url in scored:
+        key = url.lower()
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+
+        candidates.append(url)
+
+    return candidates
+
+
+def _select_crossref_pdf(
+    item: Dict[str, Any],
+) -> Optional[str]:
+
+    candidates = (
+        _select_crossref_pdf_candidates(
+            item
+        )
+    )
+
+    if not candidates:
         return None
 
-    return best_url
+    return candidates[0]
 
+
+# ============================================================
+# PDF URL VERIFICATION
+# ============================================================
+
+def _verify_pdf_url(
+    url: Optional[str],
+) -> Dict[str, Any]:
+
+    url = _clean(url)
+
+    if not url:
+        return {
+            "pdf_available": False,
+            "pdf_status": "no_url",
+            "pdf_url": None,
+        }
+
+    if not re.match(
+        r"^https?://",
+        url,
+        flags=re.IGNORECASE,
+    ):
+        return {
+            "pdf_available": False,
+            "pdf_status": "invalid_url",
+            "pdf_url": url,
+        }
+
+    response = None
+
+    try:
+        response = requests.get(
+            url,
+            stream=True,
+            allow_redirects=True,
+            timeout=PDF_VERIFY_TIMEOUT,
+            headers={
+                "User-Agent": PDF_USER_AGENT,
+                "Accept": (
+                    "application/pdf,"
+                    "application/octet-stream,"
+                    "*/*;q=0.8"
+                ),
+            },
+        )
+
+        status_code = response.status_code
+
+        if status_code in (401, 403):
+            return {
+                "pdf_available": False,
+                "pdf_status": "access_denied",
+                "pdf_url": url,
+                "http_status": status_code,
+            }
+
+        if status_code == 404:
+            return {
+                "pdf_available": False,
+                "pdf_status": "not_found",
+                "pdf_url": url,
+                "http_status": status_code,
+            }
+
+        if status_code >= 400:
+            return {
+                "pdf_available": False,
+                "pdf_status": "request_failed",
+                "pdf_url": url,
+                "http_status": status_code,
+            }
+
+        content_length = response.headers.get(
+            "Content-Length"
+        )
+
+        if content_length:
+            try:
+                size = int(content_length)
+
+                if size > MAX_PDF_SIZE:
+                    return {
+                        "pdf_available": False,
+                        "pdf_status": "too_large",
+                        "pdf_url": url,
+                        "size": size,
+                    }
+
+            except (
+                TypeError,
+                ValueError,
+            ):
+                pass
+
+        content_type = (
+            response.headers.get(
+                "Content-Type",
+                "",
+            )
+            .lower()
+        )
+
+        prefix = b""
+
+        for chunk in response.iter_content(
+            chunk_size=8192
+        ):
+            if not chunk:
+                continue
+
+            prefix += chunk
+
+            if len(prefix) >= 8192:
+                break
+
+        if not prefix.startswith(
+            PDF_MAGIC
+        ):
+            return {
+                "pdf_available": False,
+                "pdf_status": "not_pdf",
+                "pdf_url": url,
+                "content_type": content_type,
+            }
+
+        verified_url = (
+            response.url
+            or url
+        )
+
+        return {
+            "pdf_available": True,
+            "pdf_status": "verified",
+            "pdf_url": verified_url,
+            "content_type": content_type,
+        }
+
+    except requests.exceptions.Timeout:
+        return {
+            "pdf_available": False,
+            "pdf_status": "timeout",
+            "pdf_url": url,
+        }
+
+    except requests.exceptions.RequestException as exc:
+        return {
+            "pdf_available": False,
+            "pdf_status": "request_error",
+            "pdf_url": url,
+            "error": str(exc)[:300],
+        }
+
+    except Exception as exc:
+        return {
+            "pdf_available": False,
+            "pdf_status": "verification_error",
+            "pdf_url": url,
+            "error": str(exc)[:300],
+        }
+
+    finally:
+        if response is not None:
+            response.close()
+
+
+def _verify_pdf_candidates(
+    candidates: List[str],
+    cache: Optional[
+        Dict[str, Dict[str, Any]]
+    ] = None,
+) -> Dict[str, Any]:
+
+    if cache is None:
+        cache = {}
+
+    if not candidates:
+        return {
+            "pdf_available": False,
+            "pdf_status": "no_url",
+            "pdf_url": None,
+        }
+
+    last_result = {
+        "pdf_available": False,
+        "pdf_status": "unavailable",
+        "pdf_url": None,
+    }
+
+    for candidate in candidates:
+        candidate = _clean(candidate)
+
+        if not candidate:
+            continue
+
+        cache_key = candidate.lower()
+
+        if cache_key in cache:
+            result = cache[
+                cache_key
+            ]
+
+        else:
+            result = _verify_pdf_url(
+                candidate
+            )
+
+            cache[cache_key] = result
+
+        if result.get(
+            "pdf_available"
+        ):
+            return result
+
+        last_result = result
+
+    return last_result
+
+
+def _verify_all_pdf_candidates(
+    papers: List[Dict[str, Any]],
+) -> Dict[str, Dict[str, Any]]:
+
+    url_candidates: Dict[
+        str,
+        str,
+    ] = {}
+
+    for paper in papers:
+        candidates = (
+            paper.get(
+                "_pdf_candidates"
+            )
+            or []
+        )
+
+        for candidate in candidates:
+            candidate = _clean(candidate)
+
+            if not candidate:
+                continue
+
+            key = candidate.lower()
+
+            if key not in url_candidates:
+                url_candidates[key] = candidate
+
+    if not url_candidates:
+        return {}
+
+    verification_cache: Dict[
+        str,
+        Dict[str, Any],
+    ] = {}
+
+    with ThreadPoolExecutor(
+        max_workers=PDF_VERIFY_WORKERS
+    ) as executor:
+
+        future_map = {
+            executor.submit(
+                _verify_pdf_url,
+                url,
+            ): key
+            for key, url in url_candidates.items()
+        }
+
+        for future in as_completed(
+            future_map
+        ):
+            key = future_map[
+                future
+            ]
+
+            try:
+                verification_cache[
+                    key
+                ] = future.result()
+
+            except Exception as exc:
+                verification_cache[
+                    key
+                ] = {
+                    "pdf_available": False,
+                    "pdf_status": (
+                        "verification_error"
+                    ),
+                    "pdf_url": (
+                        url_candidates[key]
+                    ),
+                    "error": str(exc)[:300],
+                }
+
+    return verification_cache
+
+
+# ============================================================
+# RESULT ID
+# ============================================================
 
 def _build_result_id(
     paper: Dict[str, Any],
 ) -> str:
-    """
-    Build a stable identifier for frontend operations.
-    DOI is preferred because it is generally stable across
-    scholarly metadata providers.
-    """
 
     doi = _clean(
         paper.get("doi")
     )
 
     if doi:
-        return f"doi:{doi.lower()}"
+        return (
+            f"doi:{doi.lower()}"
+        )
 
     source = _clean(
         paper.get("source")
@@ -315,9 +777,6 @@ def _build_result_id(
 def _paper_identity_keys(
     paper: Dict[str, Any],
 ) -> List[str]:
-    """
-    Generate keys used for cross-source deduplication.
-    """
 
     keys = []
 
@@ -350,79 +809,129 @@ def _calculate_relevance(
     query: str,
     paper: Dict[str, Any],
 ) -> float:
-    """
-    Lightweight deterministic relevance score.
 
-    This is intentionally not an LLM score. It is only used
-    for ordering external discovery results.
-    """
+    query_normalized = _normalize_text(
+        query
+    )
+
+    if not query_normalized:
+        return 0.0
 
     query_tokens = set(
-        _normalize_text(query).split()
+        _tokenize(query)
     )
 
     if not query_tokens:
         return 0.0
 
+    title = _normalize_text(
+        paper.get("title")
+    )
+
+    abstract = _normalize_text(
+        paper.get("abstract")
+    )
+
+    venue = _normalize_text(
+        paper.get("venue")
+    )
+
     title_tokens = set(
-        _normalize_text(
-            paper.get("title")
-        ).split()
+        title.split()
     )
 
     abstract_tokens = set(
-        _normalize_text(
-            paper.get("abstract")
-        ).split()
+        abstract.split()
+    )
+
+    venue_tokens = set(
+        venue.split()
     )
 
     title_overlap = (
-        len(query_tokens & title_tokens)
+        len(
+            query_tokens
+            & title_tokens
+        )
         / len(query_tokens)
     )
 
     abstract_overlap = (
-        len(query_tokens & abstract_tokens)
+        len(
+            query_tokens
+            & abstract_tokens
+        )
         / len(query_tokens)
         if abstract_tokens
         else 0.0
     )
 
-    score = (
-        title_overlap * 0.70
-        + abstract_overlap * 0.30
+    venue_overlap = (
+        len(
+            query_tokens
+            & venue_tokens
+        )
+        / len(query_tokens)
+        if venue_tokens
+        else 0.0
     )
 
-    # Small metadata quality bonuses.
+    exact_title_phrase = (
+        query_normalized in title
+    )
+
+    exact_abstract_phrase = (
+        query_normalized in abstract
+    )
+
+    score = (
+        title_overlap * 0.60
+        + abstract_overlap * 0.35
+        + venue_overlap * 0.05
+    )
+
+    if exact_title_phrase:
+        score += 0.25
+
+    elif exact_abstract_phrase:
+        score += 0.10
+
     if paper.get("abstract"):
-        score += 0.03
+        score += 0.02
 
     if paper.get("authors"):
-        score += 0.02
+        score += 0.01
 
     if paper.get("doi"):
-        score += 0.02
+        score += 0.01
 
-    if paper.get("pdf_url"):
+    if paper.get("venue"):
+        score += 0.01
+
+    if paper.get("pdf_available"):
         score += 0.03
 
-    # Citation signal, deliberately kept small so popular
-    # papers do not dominate relevance.
     try:
         citations = int(
-            paper.get("citation_count") or 0
+            paper.get(
+                "citation_count"
+            )
+            or 0
         )
 
         if citations >= 100:
-            score += 0.05
+            score += 0.04
 
         elif citations >= 25:
-            score += 0.03
+            score += 0.025
 
         elif citations >= 5:
             score += 0.01
 
-    except (TypeError, ValueError):
+    except (
+        TypeError,
+        ValueError,
+    ):
         pass
 
     return round(
@@ -442,6 +951,20 @@ def _normalize_semantic_scholar_paper(
     external_ids = (
         paper.get("externalIds")
         or {}
+    )
+
+    open_access_pdf = (
+        paper.get("openAccessPdf")
+        or {}
+    )
+
+    pdf_url = _clean(
+        open_access_pdf.get("url")
+        if isinstance(
+            open_access_pdf,
+            dict,
+        )
+        else None
     )
 
     result = {
@@ -485,11 +1008,14 @@ def _normalize_semantic_scholar_paper(
             paper.get("url")
         ),
 
-        "pdf_url": _clean(
-            (
-                paper.get("openAccessPdf")
-                or {}
-            ).get("url")
+        "pdf_url": pdf_url,
+
+        "pdf_available": False,
+
+        "pdf_status": (
+            "unverified"
+            if pdf_url
+            else "no_url"
         ),
 
         "doi": _clean(
@@ -501,6 +1027,12 @@ def _normalize_semantic_scholar_paper(
         ),
 
         "external_ids": external_ids,
+
+        "_pdf_candidates": (
+            [pdf_url]
+            if pdf_url
+            else []
+        ),
     }
 
     result["id"] = _build_result_id(
@@ -570,6 +1102,12 @@ def _normalize_crossref_paper(
         item.get("URL")
     )
 
+    pdf_candidates = (
+        _select_crossref_pdf_candidates(
+            item
+        )
+    )
+
     result = {
         "source": "crossref",
 
@@ -583,8 +1121,10 @@ def _normalize_crossref_paper(
 
         "year": year,
 
-        "authors": _normalize_crossref_authors(
-            item.get("author")
+        "authors": (
+            _normalize_crossref_authors(
+                item.get("author")
+            )
         ),
 
         "venue": venue,
@@ -605,8 +1145,18 @@ def _normalize_crossref_paper(
 
         "url": url,
 
-        "pdf_url": _select_crossref_pdf(
-            item
+        "pdf_url": (
+            pdf_candidates[0]
+            if pdf_candidates
+            else None
+        ),
+
+        "pdf_available": False,
+
+        "pdf_status": (
+            "unverified"
+            if pdf_candidates
+            else "no_url"
         ),
 
         "doi": doi,
@@ -618,6 +1168,272 @@ def _normalize_crossref_paper(
             if doi
             else None,
         },
+
+        "_pdf_candidates": pdf_candidates,
+    }
+
+    result["id"] = _build_result_id(
+        result
+    )
+
+    return result
+
+
+# ============================================================
+# OPENALEX NORMALIZATION
+# ============================================================
+
+def _select_openalex_pdf_candidates(
+    work: Dict[str, Any],
+) -> List[str]:
+
+    candidates = []
+
+    open_access = (
+        work.get("open_access")
+        or {}
+    )
+
+    best_oa = (
+        work.get("best_oa_location")
+        or {}
+    )
+
+    primary_location = (
+        work.get("primary_location")
+        or {}
+    )
+
+    locations = (
+        work.get("locations")
+        or []
+    )
+
+    # --------------------------------------------------------
+    # Best OA location first.
+    # --------------------------------------------------------
+
+    if isinstance(
+        best_oa,
+        dict,
+    ):
+        _add_pdf_candidate(
+            candidates,
+            best_oa.get(
+                "pdf_url"
+            ),
+        )
+
+    # --------------------------------------------------------
+    # Primary location.
+    # --------------------------------------------------------
+
+    if isinstance(
+        primary_location,
+        dict,
+    ):
+        _add_pdf_candidate(
+            candidates,
+            primary_location.get(
+                "pdf_url"
+            ),
+        )
+
+    # --------------------------------------------------------
+    # All OA locations.
+    # --------------------------------------------------------
+
+    if isinstance(
+        locations,
+        list,
+    ):
+        for location in locations:
+            if not isinstance(
+                location,
+                dict,
+            ):
+                continue
+
+            _add_pdf_candidate(
+                candidates,
+                location.get(
+                    "pdf_url"
+                ),
+            )
+
+    return candidates
+
+
+def _normalize_openalex_paper(
+    work: Dict[str, Any],
+) -> Dict[str, Any]:
+
+    primary_location = (
+        work.get("primary_location")
+        or {}
+    )
+
+    source_info = (
+        primary_location.get(
+            "source"
+        )
+        if isinstance(
+            primary_location,
+            dict,
+        )
+        else {}
+    )
+
+    if not isinstance(
+        source_info,
+        dict,
+    ):
+        source_info = {}
+
+    abstract = (
+        _reconstruct_openalex_abstract(
+            work.get(
+                "abstract_inverted_index"
+            )
+        )
+    )
+
+    authorships = (
+        work.get("authorships")
+        or []
+    )
+
+    authors = []
+
+    for authorship in authorships:
+        if not isinstance(
+            authorship,
+            dict,
+        ):
+            continue
+
+        author = (
+            authorship.get(
+                "author"
+            )
+            or {}
+        )
+
+        if not isinstance(
+            author,
+            dict,
+        ):
+            continue
+
+        name = _clean(
+            author.get("display_name")
+        )
+
+        if not name:
+            continue
+
+        authors.append(
+            {
+                "name": name,
+                "id": _clean(
+                    author.get("id")
+                ),
+            }
+        )
+
+    doi = _clean(
+        work.get("doi")
+    )
+
+    if doi:
+        doi = re.sub(
+            r"^https?://doi\.org/",
+            "",
+            doi,
+            flags=re.IGNORECASE,
+        )
+
+    pdf_candidates = (
+        _select_openalex_pdf_candidates(
+            work
+        )
+    )
+
+    source_id = _clean(
+        work.get("id")
+    )
+
+    result = {
+        "source": "openalex",
+
+        "source_id": source_id,
+
+        "title": _clean(
+            work.get("title")
+        ),
+
+        "abstract": abstract,
+
+        "year": _normalize_year(
+            work.get(
+                "publication_year"
+            )
+        ),
+
+        "authors": authors,
+
+        "venue": _clean(
+            source_info.get(
+                "display_name"
+            )
+        ),
+
+        "citation_count": (
+            work.get(
+                "cited_by_count"
+            )
+            or 0
+        ),
+
+        "reference_count": len(
+            work.get(
+                "referenced_works"
+            )
+            or []
+        ),
+
+        "url": _clean(
+            work.get("doi")
+        ) or _clean(
+            work.get("id")
+        ),
+
+        "pdf_url": (
+            pdf_candidates[0]
+            if pdf_candidates
+            else None
+        ),
+
+        "pdf_available": False,
+
+        "pdf_status": (
+            "unverified"
+            if pdf_candidates
+            else "no_url"
+        ),
+
+        "doi": doi,
+
+        "arxiv_id": None,
+
+        "external_ids": {
+            "DOI": doi
+            if doi
+            else None,
+
+        },
+
+        "_pdf_candidates": pdf_candidates,
     }
 
     result["id"] = _build_result_id(
@@ -632,6 +1448,7 @@ def _normalize_crossref_paper(
 # ============================================================
 
 def _semantic_scholar_headers() -> Dict[str, str]:
+
     headers = {}
 
     if SEMANTIC_SCHOLAR_API_KEY:
@@ -654,7 +1471,10 @@ def search_semantic_scholar(
 
     limit = max(
         1,
-        min(int(limit), 100),
+        min(
+            int(limit),
+            MAX_PROVIDER_RESULTS,
+        ),
     )
 
     fields = ",".join(
@@ -697,7 +1517,10 @@ def search_semantic_scholar(
             "data",
             [],
         )
-        if isinstance(paper, dict)
+        if isinstance(
+            paper,
+            dict,
+        )
     ]
 
 
@@ -743,7 +1566,10 @@ def get_semantic_scholar_paper(
 
     paper = response.json()
 
-    if not isinstance(paper, dict):
+    if not isinstance(
+        paper,
+        dict,
+    ):
         return None
 
     return _normalize_semantic_scholar_paper(
@@ -756,6 +1582,7 @@ def get_semantic_scholar_paper(
 # ============================================================
 
 def _crossref_headers() -> Dict[str, str]:
+
     return {
         "User-Agent": (
             "SciBrain/1.0 "
@@ -765,6 +1592,7 @@ def _crossref_headers() -> Dict[str, str]:
 
 
 def _crossref_params() -> Dict[str, str]:
+
     params = {}
 
     if CROSSREF_EMAIL:
@@ -785,7 +1613,10 @@ def search_crossref(
 
     limit = max(
         1,
-        min(int(limit), 50),
+        min(
+            int(limit),
+            MAX_PROVIDER_RESULTS,
+        ),
     )
 
     params = {
@@ -816,9 +1647,14 @@ def search_crossref(
     )
 
     return [
-        _normalize_crossref_paper(item)
+        _normalize_crossref_paper(
+            item
+        )
         for item in items
-        if isinstance(item, dict)
+        if isinstance(
+            item,
+            dict,
+        )
     ]
 
 
@@ -840,11 +1676,9 @@ def get_crossref_work(
 
     doi = doi.strip()
 
-    params = _crossref_params()
-
     response = requests.get(
         f"{CROSSREF_URL}/works/{doi}",
-        params=params,
+        params=_crossref_params(),
         headers=_crossref_headers(),
         timeout=REQUEST_TIMEOUT,
     )
@@ -860,7 +1694,10 @@ def get_crossref_work(
         "message"
     )
 
-    if not isinstance(item, dict):
+    if not isinstance(
+        item,
+        dict,
+    ):
         return None
 
     return _normalize_crossref_paper(
@@ -869,24 +1706,123 @@ def get_crossref_work(
 
 
 # ============================================================
+# OPENALEX REQUEST
+# ============================================================
+
+def _openalex_params() -> Dict[str, str]:
+
+    params = {}
+
+    if OPENALEX_EMAIL:
+        params["mailto"] = OPENALEX_EMAIL
+
+    return params
+
+
+def _openalex_headers() -> Dict[str, str]:
+
+    return {
+        "User-Agent": (
+            "SciBrain/1.0 "
+            "(academic research assistant)"
+        )
+    }
+
+
+def search_openalex(
+    query: str,
+    limit: int = 10,
+) -> List[Dict[str, Any]]:
+
+    query = query.strip()
+
+    if not query:
+        return []
+
+    limit = max(
+        1,
+        min(
+            int(limit),
+            MAX_PROVIDER_RESULTS,
+        ),
+    )
+
+    params = {
+        "search": query,
+        "per-page": limit,
+        "select": (
+            "id,doi,title,publication_year,"
+            "authorships,primary_location,"
+            "best_oa_location,locations,"
+            "open_access,cited_by_count,"
+            "referenced_works,"
+            "abstract_inverted_index"
+        ),
+        **_openalex_params(),
+    }
+
+    response = requests.get(
+        f"{OPENALEX_URL}/works",
+        params=params,
+        headers=_openalex_headers(),
+        timeout=REQUEST_TIMEOUT,
+    )
+
+    response.raise_for_status()
+
+    payload = response.json()
+
+    results = payload.get(
+        "results",
+        [],
+    )
+
+    return [
+        _normalize_openalex_paper(
+            work
+        )
+        for work in results
+        if isinstance(
+            work,
+            dict,
+        )
+    ]
+
+
+# ============================================================
 # RESULT DEDUPLICATION
 # ============================================================
+
+def _pdf_quality(
+    paper: Dict[str, Any],
+) -> int:
+
+    if paper.get(
+        "pdf_available"
+    ) is True:
+        return 3
+
+    if paper.get("pdf_url"):
+        return 1
+
+    return 0
+
 
 def _deduplicate_results(
     results: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
-    """
-    Deduplicate papers returned by multiple providers.
 
-    DOI is the strongest identity signal. Title is used as
-    a fallback.
-    """
-
-    seen = {}
+    seen: Dict[
+        str,
+        Dict[str, Any],
+    ] = {}
 
     for paper in results:
 
-        if not isinstance(paper, dict):
+        if not isinstance(
+            paper,
+            dict,
+        ):
             continue
 
         keys = _paper_identity_keys(
@@ -899,45 +1835,74 @@ def _deduplicate_results(
         existing = None
 
         for key in keys:
-
             if key in seen:
                 existing = seen[key]
                 break
 
         if existing is None:
 
-            seen[
-                keys[0]
-            ] = paper
+            seen[keys[0]] = paper
 
             for key in keys[1:]:
                 seen[key] = paper
 
             continue
 
-        # Merge missing metadata from the newer result.
+        if (
+            _pdf_quality(paper)
+            > _pdf_quality(existing)
+        ):
+
+            existing["pdf_url"] = (
+                paper.get(
+                    "pdf_url"
+                )
+            )
+
+            existing["pdf_available"] = (
+                paper.get(
+                    "pdf_available"
+                )
+            )
+
+            existing["pdf_status"] = (
+                paper.get(
+                    "pdf_status"
+                )
+            )
+
         for field in [
             "abstract",
             "venue",
             "url",
-            "pdf_url",
             "doi",
             "arxiv_id",
         ]:
 
             if not existing.get(field):
                 if paper.get(field):
-                    existing[field] = paper[field]
+                    existing[field] = (
+                        paper[field]
+                    )
 
-        if not existing.get("authors"):
+        if not existing.get(
+            "authors"
+        ):
             if paper.get("authors"):
                 existing["authors"] = (
                     paper["authors"]
                 )
 
-        # Prefer the larger citation/reference counts.
+        if not existing.get("year"):
+            if paper.get("year"):
+                existing["year"] = (
+                    paper["year"]
+                )
+
         try:
-            existing["citation_count"] = max(
+            existing[
+                "citation_count"
+            ] = max(
                 int(
                     existing.get(
                         "citation_count"
@@ -951,11 +1916,17 @@ def _deduplicate_results(
                     or 0
                 ),
             )
-        except (TypeError, ValueError):
+
+        except (
+            TypeError,
+            ValueError,
+        ):
             pass
 
         try:
-            existing["reference_count"] = max(
+            existing[
+                "reference_count"
+            ] = max(
                 int(
                     existing.get(
                         "reference_count"
@@ -969,18 +1940,25 @@ def _deduplicate_results(
                     or 0
                 ),
             )
-        except (TypeError, ValueError):
+
+        except (
+            TypeError,
+            ValueError,
+        ):
             pass
 
-        # Preserve source information when a paper exists
-        # in more than one provider.
         sources = existing.get(
             "sources"
         )
 
-        if not isinstance(sources, list):
+        if not isinstance(
+            sources,
+            list,
+        ):
             sources = [
-                existing.get("source")
+                existing.get(
+                    "source"
+                )
             ]
 
         current_source = paper.get(
@@ -1003,18 +1981,24 @@ def _deduplicate_results(
 
     for paper in seen.values():
 
-        paper_id = id(paper)
+        paper_object_id = id(
+            paper
+        )
 
-        if paper_id in added_ids:
+        if paper_object_id in added_ids:
             continue
 
         added_ids.add(
-            paper_id
+            paper_object_id
         )
 
-        if not paper.get("sources"):
+        if not paper.get(
+            "sources"
+        ):
             paper["sources"] = [
-                paper.get("source")
+                paper.get(
+                    "source"
+                )
             ]
 
         unique_results.append(
@@ -1036,17 +2020,24 @@ def _error_status(
     status = "error"
 
     if (
-        isinstance(exc, requests.HTTPError)
+        isinstance(
+            exc,
+            requests.HTTPError,
+        )
         and exc.response is not None
     ):
 
-        if exc.response.status_code == 429:
+        status_code = (
+            exc.response.status_code
+        )
+
+        if status_code == 429:
             status = "rate_limited"
 
-        elif 400 <= exc.response.status_code < 500:
+        elif 400 <= status_code < 500:
             status = "request_failed"
 
-        elif exc.response.status_code >= 500:
+        elif status_code >= 500:
             status = "provider_error"
 
     return {
@@ -1067,6 +2058,14 @@ def search_external_sources(
 
     query = query.strip()
 
+    final_limit = max(
+        1,
+        min(
+            int(limit),
+            100,
+        ),
+    )
+
     if not query:
         return {
             "query": query,
@@ -1075,27 +2074,67 @@ def search_external_sources(
             "sources": [],
             "source_status": {},
             "count": 0,
+            "filtered_count": 0,
         }
 
-    requested_sources = sources or DEFAULT_SOURCES
+    requested_sources = (
+        sources
+        or DEFAULT_SOURCES
+    )
 
-    # Normalize and remove duplicates.
     normalized_sources = []
 
     for source in requested_sources:
 
-        source = source.strip().lower()
+        source = (
+            str(source)
+            .strip()
+            .lower()
+        )
 
-        if source and source not in normalized_sources:
+        if (
+            source
+            and source not in normalized_sources
+        ):
             normalized_sources.append(
                 source
             )
 
-    results = []
+    # --------------------------------------------------------
+    # SEARCH DEPTH
+    #
+    # If frontend asks for 50:
+    #
+    #     provider_limit = 100
+    #
+    # We do not make the UI number equal to the provider
+    # discovery depth.
+    # --------------------------------------------------------
+
+    provider_limit = max(
+        final_limit * SEARCH_MULTIPLIER,
+        50,
+    )
+
+    provider_limit = min(
+        provider_limit,
+        MAX_PROVIDER_RESULTS,
+    )
+
+    results: List[
+        Dict[str, Any]
+    ] = []
 
     errors = []
 
-    source_status = {}
+    source_status: Dict[
+        str,
+        Dict[str, Any],
+    ] = {}
+
+    # --------------------------------------------------------
+    # QUERY PROVIDERS
+    # --------------------------------------------------------
 
     for source in normalized_sources:
 
@@ -1106,9 +2145,7 @@ def search_external_sources(
                 "error": "Unsupported source",
             }
 
-            errors.append(
-                error
-            )
+            errors.append(error)
 
             source_status[source] = {
                 "status": "unsupported",
@@ -1124,7 +2161,7 @@ def search_external_sources(
                 source_results = (
                     search_semantic_scholar(
                         query=query,
-                        limit=limit,
+                        limit=provider_limit,
                     )
                 )
 
@@ -1133,7 +2170,16 @@ def search_external_sources(
                 source_results = (
                     search_crossref(
                         query=query,
-                        limit=limit,
+                        limit=provider_limit,
+                    )
+                )
+
+            elif source == "openalex":
+
+                source_results = (
+                    search_openalex(
+                        query=query,
+                        limit=provider_limit,
                     )
                 )
 
@@ -1153,13 +2199,11 @@ def search_external_sources(
 
         except requests.RequestException as exc:
 
-            error = {
-                "source": source,
-                "error": str(exc),
-            }
-
             errors.append(
-                error
+                {
+                    "source": source,
+                    "error": str(exc),
+                }
             )
 
             source_status[source] = (
@@ -1171,13 +2215,11 @@ def search_external_sources(
 
         except Exception as exc:
 
-            error = {
-                "source": source,
-                "error": str(exc),
-            }
-
             errors.append(
-                error
+                {
+                    "source": source,
+                    "error": str(exc),
+                }
             )
 
             source_status[source] = {
@@ -1185,23 +2227,41 @@ def search_external_sources(
                 "error": str(exc),
             }
 
-    # Remove duplicate records.
-    results = _deduplicate_results(
+    # --------------------------------------------------------
+    # NOTHING FROM PROVIDERS
+    # --------------------------------------------------------
+
+    if not results:
+
+        return {
+            "query": query,
+            "results": [],
+            "errors": errors,
+            "sources": normalized_sources,
+            "source_status": source_status,
+            "count": 0,
+            "filtered_count": 0,
+            "candidate_count": 0,
+            "verified_count": 0,
+        }
+
+    raw_candidate_count = len(
         results
     )
 
-    # Calculate relevance after merging.
+    # --------------------------------------------------------
+    # INITIAL RELEVANCE
+    # --------------------------------------------------------
+
     for paper in results:
 
-        paper["relevance_score"] = (
-            _calculate_relevance(
-                query=query,
-                paper=paper,
-            )
+        paper[
+            "relevance_score"
+        ] = _calculate_relevance(
+            query=query,
+            paper=paper,
         )
 
-    # Highest relevance first.
-    # Citation count is only a secondary tie-breaker.
     results.sort(
         key=lambda paper: (
             paper.get(
@@ -1211,25 +2271,246 @@ def search_external_sources(
             paper.get(
                 "citation_count",
                 0,
-            ) or 0,
+            )
+            or 0,
             paper.get(
                 "year",
                 0,
-            ) or 0,
+            )
+            or 0,
         ),
         reverse=True,
     )
 
-    # Return only the requested number of final results.
-    final_results = results[
-        : max(
-            1,
-            min(
-                int(limit),
-                50,
-            ),
+    # --------------------------------------------------------
+    # DEDUPLICATE BEFORE PDF CHECK
+    # --------------------------------------------------------
+
+    results = _deduplicate_results(
+        results
+    )
+
+    deduplicated_candidate_count = (
+        len(results)
+    )
+
+    # --------------------------------------------------------
+    # PDF VERIFICATION
+    # --------------------------------------------------------
+
+    verification_cache = (
+        _verify_all_pdf_candidates(
+            results
         )
+    )
+
+    verified_results = []
+
+    filtered_count = 0
+
+    for paper in results:
+
+        candidates = (
+            paper.get(
+                "_pdf_candidates"
+            )
+            or []
+        )
+
+        verification = {
+            "pdf_available": False,
+            "pdf_status": "no_url",
+            "pdf_url": None,
+        }
+
+        for candidate in candidates:
+
+            candidate = _clean(
+                candidate
+            )
+
+            if not candidate:
+                continue
+
+            cache_key = (
+                candidate.lower()
+            )
+
+            result = (
+                verification_cache.get(
+                    cache_key
+                )
+            )
+
+            if result is None:
+
+                result = _verify_pdf_url(
+                    candidate
+                )
+
+                verification_cache[
+                    cache_key
+                ] = result
+
+            if result.get(
+                "pdf_available"
+            ):
+
+                verification = result
+
+                break
+
+            verification = result
+
+        paper[
+            "pdf_available"
+        ] = (
+            verification.get(
+                "pdf_available"
+            )
+            is True
+        )
+
+        paper[
+            "pdf_status"
+        ] = (
+            verification.get(
+                "pdf_status"
+            )
+            or "unavailable"
+        )
+
+        if paper[
+            "pdf_available"
+        ]:
+
+            paper[
+                "pdf_url"
+            ] = verification.get(
+                "pdf_url"
+            )
+
+            paper[
+                "pdf_status"
+            ] = "verified"
+
+            verified_results.append(
+                paper
+            )
+
+        else:
+
+            paper[
+                "pdf_url"
+            ] = None
+
+            filtered_count += 1
+
+        paper.pop(
+            "_pdf_candidates",
+            None,
+        )
+
+    # --------------------------------------------------------
+    # FINAL DEDUPLICATION
+    # --------------------------------------------------------
+
+    results = _deduplicate_results(
+        verified_results
+    )
+
+    # --------------------------------------------------------
+    # FINAL RELEVANCE
+    # --------------------------------------------------------
+
+    for paper in results:
+
+        paper[
+            "relevance_score"
+        ] = _calculate_relevance(
+            query=query,
+            paper=paper,
+        )
+
+        paper[
+            "pdf_available"
+        ] = True
+
+        paper[
+            "pdf_status"
+        ] = "verified"
+
+    # --------------------------------------------------------
+    # FINAL SORT
+    # --------------------------------------------------------
+
+    results.sort(
+        key=lambda paper: (
+            paper.get(
+                "relevance_score",
+                0,
+            ),
+            paper.get(
+                "citation_count",
+                0,
+            )
+            or 0,
+            paper.get(
+                "year",
+                0,
+            )
+            or 0,
+        ),
+        reverse=True,
+    )
+
+    total_verified = len(
+        results
+    )
+
+    # --------------------------------------------------------
+    # FINAL LIMIT
+    # --------------------------------------------------------
+
+    final_results = results[
+        :final_limit
     ]
+
+    # --------------------------------------------------------
+    # SOURCE PDF COUNTS
+    # --------------------------------------------------------
+
+    for source in normalized_sources:
+
+        status = source_status.get(
+            source
+        )
+
+        if not status:
+            continue
+
+        if status.get(
+            "status"
+        ) != "success":
+            continue
+
+        status[
+            "pdf_verified_count"
+        ] = sum(
+            1
+            for paper in results
+            if source
+            in (
+                paper.get(
+                    "sources"
+                )
+                or [
+                    paper.get(
+                        "source"
+                    )
+                ]
+            )
+        )
 
     return {
         "query": query,
@@ -1244,5 +2525,19 @@ def search_external_sources(
 
         "count": len(
             final_results
+        ),
+
+        "filtered_count": filtered_count,
+
+        "candidate_count": (
+            raw_candidate_count
+        ),
+
+        "deduplicated_candidate_count": (
+            deduplicated_candidate_count
+        ),
+
+        "verified_count": (
+            total_verified
         ),
     }

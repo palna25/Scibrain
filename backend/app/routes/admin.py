@@ -1,15 +1,20 @@
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.database.postgres import get_db
+from app.database.mongodb import papers_collection
 from app.models.user import User
 from app.core.dependencies import get_current_admin
-from app.database.mongodb import papers_collection
+from app.services.vector_store import delete_paper_chunks
 
 
 router = APIRouter(
     prefix="/api/admin",
-    tags=["Admin"]
+    tags=["Admin"],
 )
 
 
@@ -20,28 +25,30 @@ router = APIRouter(
 @router.get("/statistics")
 def get_admin_statistics(
     db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
+    admin: User = Depends(get_current_admin),
 ):
     total_users = db.query(User).count()
 
     active_users = (
         db.query(User)
-        .filter(User.is_active == True)
+        .filter(User.is_active.is_(True))
         .count()
     )
 
     total_papers = papers_collection.count_documents({})
 
+    # SciBrain's actual successful paper status is "ready".
+    # Keep "analyzed" in the response for frontend compatibility.
     analyzed_papers = papers_collection.count_documents({
-        "status": "analyzed"
+        "status": "ready",
     })
 
     processing_papers = papers_collection.count_documents({
-        "status": "processing"
+        "status": "processing",
     })
 
     failed_papers = papers_collection.count_documents({
-        "status": "error"
+        "status": "error",
     })
 
     return {
@@ -54,18 +61,18 @@ def get_admin_statistics(
             "analyzed": analyzed_papers,
             "processing": processing_papers,
             "failed": failed_papers,
-        }
+        },
     }
 
 
 # ==========================================================
-# GET USERS
+# GET ALL USERS
 # ==========================================================
 
 @router.get("/users")
 def get_users(
     db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
+    admin: User = Depends(get_current_admin),
 ):
     users = (
         db.query(User)
@@ -88,14 +95,19 @@ def get_users(
 
 
 # ==========================================================
-# DEACTIVATE USER
+# UPDATE USER STATUS
 # ==========================================================
+
+class UserStatusUpdate(BaseModel):
+    is_active: bool
+
 
 @router.patch("/users/{user_id}/status")
 def update_user_status(
     user_id: int,
+    payload: UserStatusUpdate,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
+    admin: User = Depends(get_current_admin),
 ):
     user = (
         db.query(User)
@@ -106,20 +118,37 @@ def update_user_status(
     if not user:
         raise HTTPException(
             status_code=404,
-            detail="User not found."
+            detail="User not found.",
         )
 
-    # Prevent the admin from disabling itself
-    if user.id == admin.id:
+    if user.id == admin.id and not payload.is_active:
         raise HTTPException(
             status_code=400,
-            detail="The admin account cannot be deactivated."
+            detail="The admin account cannot be deactivated.",
         )
 
-    user.is_active = not user.is_active
+    if user.is_active == payload.is_active:
+        return {
+            "id": user.id,
+            "is_active": user.is_active,
+            "message": (
+                "User is already active."
+                if user.is_active
+                else "User is already inactive."
+            ),
+        }
 
-    db.commit()
-    db.refresh(user)
+    user.is_active = payload.is_active
+
+    try:
+        db.commit()
+        db.refresh(user)
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to update user status.",
+        )
 
     return {
         "id": user.id,
@@ -128,7 +157,7 @@ def update_user_status(
             "User activated successfully."
             if user.is_active
             else "User deactivated successfully."
-        )
+        ),
     }
 
 
@@ -140,7 +169,7 @@ def update_user_status(
 def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
+    admin: User = Depends(get_current_admin),
 ):
     user = (
         db.query(User)
@@ -151,20 +180,27 @@ def delete_user(
     if not user:
         raise HTTPException(
             status_code=404,
-            detail="User not found."
+            detail="User not found.",
         )
 
     if user.id == admin.id:
         raise HTTPException(
             status_code=400,
-            detail="The admin account cannot be deleted."
+            detail="The admin account cannot be deleted.",
         )
 
-    db.delete(user)
-    db.commit()
+    try:
+        db.delete(user)
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to delete user.",
+        )
 
     return {
-        "message": "User deleted successfully."
+        "message": "User deleted successfully.",
     }
 
 
@@ -174,7 +210,7 @@ def delete_user(
 
 @router.get("/papers")
 def get_admin_papers(
-    admin: User = Depends(get_current_admin)
+    admin: User = Depends(get_current_admin),
 ):
     papers = list(
         papers_collection.find(
@@ -187,18 +223,12 @@ def get_admin_papers(
                 "status": 1,
                 "uploaded_at": 1,
                 "analysis": 1,
-            }
-        ).sort(
-            "uploaded_at",
-            -1
-        )
+            },
+        ).sort("uploaded_at", -1)
     )
 
-    result = []
-
-    for paper in papers:
-
-        result.append({
+    return [
+        {
             "id": str(paper["_id"]),
             "title": paper.get("title", "Untitled Paper"),
             "filename": paper.get("filename", ""),
@@ -206,9 +236,9 @@ def get_admin_papers(
             "status": paper.get("status", "uploaded"),
             "uploaded_at": paper.get("uploaded_at"),
             "has_analysis": paper.get("analysis") is not None,
-        })
-
-    return result
+        }
+        for paper in papers
+    ]
 
 
 # ==========================================================
@@ -218,22 +248,58 @@ def get_admin_papers(
 @router.delete("/papers/{paper_id}")
 def delete_paper(
     paper_id: str,
-    admin: User = Depends(get_current_admin)
+    admin: User = Depends(get_current_admin),
 ):
     paper = papers_collection.find_one({
-        "_id": paper_id
+        "_id": paper_id,
     })
 
     if not paper:
         raise HTTPException(
             status_code=404,
-            detail="Paper not found."
+            detail="Paper not found.",
         )
 
-    papers_collection.delete_one({
-        "_id": paper_id
-    })
+    try:
+        # Remove the paper's indexed chunks from Qdrant first.
+        delete_paper_chunks(paper_id=paper_id)
+
+        # Remove the stored PDF if the paper has a saved file path.
+        stored_path = paper.get("file_path")
+
+        if stored_path:
+            pdf_path = Path(stored_path)
+
+            if pdf_path.is_file():
+                pdf_path.unlink()
+
+        # Delete the MongoDB document after the cleanup steps succeed.
+        result = papers_collection.delete_one({
+            "_id": paper_id,
+        })
+
+        if result.deleted_count != 1:
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "The paper cleanup ran, but the database "
+                    "record could not be deleted. Please verify "
+                    "the paper before retrying."
+                ),
+            )
+
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Failed to delete the paper and complete its cleanup. "
+                "Verify the paper's stored file and vector data "
+                "before retrying."
+            ),
+        )
 
     return {
-        "message": "Paper deleted successfully."
+        "message": "Paper and associated stored data deleted successfully.",
     }

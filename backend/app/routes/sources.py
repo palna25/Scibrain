@@ -125,6 +125,7 @@ def _normalize_doi(doi: Optional[str]) -> str:
     compare consistently.
 
     Examples:
+
         https://doi.org/10.1234/example
         doi:10.1234/example
         10.1234/example
@@ -160,12 +161,6 @@ def _safe_filename(paper_id: str) -> str:
     return f"{paper_id}.pdf"
 
 
-def _paper_title_from_filename(filename: str) -> str:
-    return os.path.splitext(
-        os.path.basename(filename)
-    )[0]
-
-
 def _build_author_names(
     authors: Optional[List[Dict[str, Any]]],
 ) -> List[str]:
@@ -180,7 +175,6 @@ def _build_author_names(
     names = []
 
     for author in authors:
-
         if not isinstance(author, dict):
             continue
 
@@ -220,7 +214,6 @@ def _find_existing_paper(
     # --------------------------------------------------------
 
     if normalized_doi:
-
         existing = papers_collection.find_one(
             {
                 "doi": {
@@ -252,7 +245,6 @@ def _find_existing_paper(
     )
 
     if normalized_title:
-
         existing = papers_collection.find_one(
             {
                 "title": {
@@ -298,8 +290,16 @@ def _download_pdf(
             "This paper does not have an available PDF URL."
         )
 
-    try:
+    if not re.match(
+        r"^https?://",
+        pdf_url,
+        flags=re.IGNORECASE,
+    ):
+        raise ValueError(
+            "The PDF URL must use HTTP or HTTPS."
+        )
 
+    try:
         response = requests.get(
             pdf_url,
             stream=True,
@@ -314,128 +314,118 @@ def _download_pdf(
         )
 
     except requests.RequestException as error:
-
         raise ValueError(
             f"Could not download the paper PDF: {error}"
         )
 
-    if response.status_code != 200:
-
-        raise ValueError(
-            "The external PDF could not be downloaded "
-            f"(HTTP {response.status_code})."
-        )
-
-    # --------------------------------------------------------
-    # Content-Length check
-    # --------------------------------------------------------
-
-    content_length = response.headers.get(
-        "Content-Length"
-    )
-
-    if content_length:
-
-        try:
-
-            declared_size = int(
-                content_length
+    try:
+        if response.status_code != 200:
+            raise ValueError(
+                "The external PDF could not be downloaded "
+                f"(HTTP {response.status_code})."
             )
 
-            if declared_size > MAX_PDF_SIZE:
+        # ----------------------------------------------------
+        # Content-Length check
+        # ----------------------------------------------------
 
-                raise ValueError(
-                    "The PDF exceeds SciBrain's "
-                    "20 MB import limit."
+        content_length = response.headers.get(
+            "Content-Length"
+        )
+
+        if content_length:
+            try:
+                declared_size = int(
+                    content_length
                 )
 
-        except ValueError as error:
-
-            if "20 MB import limit" in str(error):
-                raise
-
-    # --------------------------------------------------------
-    # Stream download with hard size limit
-    # --------------------------------------------------------
-
-    total_bytes = 0
-
-    try:
-
-        with open(
-            destination,
-            "wb",
-        ) as output:
-
-            for chunk in response.iter_content(
-                chunk_size=64 * 1024
-            ):
-
-                if not chunk:
-                    continue
-
-                total_bytes += len(chunk)
-
-                if total_bytes > MAX_PDF_SIZE:
-
+                if declared_size > MAX_PDF_SIZE:
                     raise ValueError(
                         "The PDF exceeds SciBrain's "
                         "20 MB import limit."
                     )
 
-                output.write(chunk)
+            except ValueError as error:
+                if "20 MB import limit" in str(error):
+                    raise
 
-    except ValueError:
-        raise
+        # ----------------------------------------------------
+        # Stream download with hard size limit
+        # ----------------------------------------------------
 
-    except Exception as error:
+        total_bytes = 0
 
-        raise ValueError(
-            f"Failed while saving the downloaded PDF: {error}"
-        )
+        try:
+            with open(
+                destination,
+                "wb",
+            ) as output:
 
-    # --------------------------------------------------------
-    # Basic validation
-    # --------------------------------------------------------
+                for chunk in response.iter_content(
+                    chunk_size=64 * 1024
+                ):
+                    if not chunk:
+                        continue
 
-    if total_bytes == 0:
+                    total_bytes += len(chunk)
 
-        raise ValueError(
-            "The downloaded PDF is empty."
-        )
+                    if total_bytes > MAX_PDF_SIZE:
+                        raise ValueError(
+                            "The PDF exceeds SciBrain's "
+                            "20 MB import limit."
+                        )
 
-    # --------------------------------------------------------
-    # PDF magic-byte validation
-    # --------------------------------------------------------
+                    output.write(chunk)
 
-    try:
+        except ValueError:
+            raise
 
-        with open(
-            destination,
-            "rb",
-        ) as file:
+        except Exception as error:
+            raise ValueError(
+                "Failed while saving the downloaded PDF: "
+                f"{error}"
+            )
 
-            header = file.read(5)
+        # ----------------------------------------------------
+        # Basic validation
+        # ----------------------------------------------------
 
-    except Exception as error:
+        if total_bytes == 0:
+            raise ValueError(
+                "The downloaded PDF is empty."
+            )
 
-        raise ValueError(
-            f"Could not validate downloaded PDF: {error}"
-        )
+        # ----------------------------------------------------
+        # PDF magic-byte validation
+        # ----------------------------------------------------
 
-    if header != b"%PDF-":
+        try:
+            with open(
+                destination,
+                "rb",
+            ) as file:
+                header = file.read(5)
 
-        # Delete invalid download.
-        if os.path.exists(destination):
-            os.remove(destination)
+        except Exception as error:
+            raise ValueError(
+                "Could not validate downloaded PDF: "
+                f"{error}"
+            )
 
-        raise ValueError(
-            "The external URL did not return a valid PDF. "
-            "It may require authentication or provide an "
-            "HTML/paywall page instead."
-        )
+        if header != b"%PDF-":
+            if os.path.exists(destination):
+                os.remove(destination)
 
-    return total_bytes
+            raise ValueError(
+                "The external URL did not return a valid PDF. "
+                "It may require authentication or provide an "
+                "HTML/paywall page instead."
+            )
+
+        return total_bytes
+
+    finally:
+        response.close()
 
 
 # ============================================================
@@ -453,23 +443,19 @@ def _extract_pdf_text(
     """
 
     try:
-
         document = fitz.open(
             file_path
         )
 
     except Exception as error:
-
         raise ValueError(
             f"Failed to open imported PDF: {error}"
         )
 
     try:
-
         extracted_text = ""
 
         for page in document:
-
             extracted_text += page.get_text()
 
         page_count = len(
@@ -477,11 +463,9 @@ def _extract_pdf_text(
         )
 
     finally:
-
         document.close()
 
     if not extracted_text.strip():
-
         raise ValueError(
             "No readable text could be extracted "
             "from this PDF. Scanned/image-only PDFs "
@@ -509,14 +493,12 @@ def search_sources(
     query = request.query.strip()
 
     if not query:
-
         raise HTTPException(
             status_code=400,
             detail="Search query cannot be empty.",
         )
 
     try:
-
         return search_external_sources(
             query=query,
             sources=request.sources,
@@ -524,7 +506,6 @@ def search_sources(
         )
 
     except Exception as exc:
-
         raise HTTPException(
             status_code=502,
             detail=(
@@ -561,7 +542,6 @@ def import_external_paper(
     title = request.title.strip()
 
     if not title:
-
         raise HTTPException(
             status_code=400,
             detail="Paper title cannot be empty.",
@@ -581,7 +561,6 @@ def import_external_paper(
     )
 
     if existing:
-
         existing_id = str(
             existing.get("_id")
         )
@@ -614,7 +593,6 @@ def import_external_paper(
     )
 
     if not pdf_url:
-
         raise HTTPException(
             status_code=400,
             detail=(
@@ -646,14 +624,12 @@ def import_external_paper(
     # --------------------------------------------------------
 
     try:
-
         downloaded_size = _download_pdf(
             pdf_url=pdf_url,
             destination=file_path,
         )
 
     except ValueError as error:
-
         if os.path.exists(file_path):
             os.remove(file_path)
 
@@ -667,7 +643,6 @@ def import_external_paper(
     # --------------------------------------------------------
 
     try:
-
         extracted_text, page_count = (
             _extract_pdf_text(
                 file_path
@@ -675,7 +650,6 @@ def import_external_paper(
         )
 
     except ValueError as error:
-
         if os.path.exists(file_path):
             os.remove(file_path)
 
@@ -794,13 +768,11 @@ def import_external_paper(
     # --------------------------------------------------------
 
     try:
-
         papers_collection.insert_one(
             paper_document
         )
 
     except Exception as error:
-
         if os.path.exists(file_path):
             os.remove(file_path)
 
@@ -817,7 +789,6 @@ def import_external_paper(
     # --------------------------------------------------------
 
     try:
-
         indexed_chunks = index_paper_chunks(
             paper_id=paper_id,
             title=title,
@@ -825,7 +796,6 @@ def import_external_paper(
         )
 
         if indexed_chunks == 0:
-
             papers_collection.update_one(
                 {
                     "_id": paper_id,
@@ -871,7 +841,6 @@ def import_external_paper(
         raise
 
     except Exception as error:
-
         papers_collection.update_one(
             {
                 "_id": paper_id,
@@ -940,13 +909,11 @@ def semantic_scholar_paper(
     paper_id: str,
 ):
     try:
-
         result = get_semantic_scholar_paper(
             paper_id
         )
 
         if result is None:
-
             raise HTTPException(
                 status_code=404,
                 detail="Paper not found.",
@@ -958,7 +925,6 @@ def semantic_scholar_paper(
         raise
 
     except Exception as exc:
-
         raise HTTPException(
             status_code=502,
             detail=(
@@ -981,20 +947,17 @@ def crossref_doi(
     """
 
     if not doi or len(doi.strip()) < 3:
-
         raise HTTPException(
             status_code=400,
             detail="A valid DOI is required.",
         )
 
     try:
-
         result = get_crossref_work(
             doi.strip()
         )
 
         if result is None:
-
             raise HTTPException(
                 status_code=404,
                 detail="DOI not found.",
@@ -1006,7 +969,6 @@ def crossref_doi(
         raise
 
     except Exception as exc:
-
         raise HTTPException(
             status_code=502,
             detail=(
