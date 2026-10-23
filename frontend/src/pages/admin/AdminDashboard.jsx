@@ -3,12 +3,13 @@ import {
   Users,
   FileText,
   CheckCircle2,
-  Loader2,
   UserCheck,
   Activity,
   ShieldCheck,
   ArrowUpRight,
   AlertCircle,
+  BookOpen,
+  MessageSquare,
 } from "lucide-react";
 
 const API_BASE_URL = "http://127.0.0.1:8000";
@@ -146,11 +147,11 @@ function AdminDashboard() {
   const analyzedPapers =
     statistics?.papers?.analyzed ?? null;
 
-  const processingPapers =
-    statistics?.papers?.processing ?? null;
+    const totalNotebooks =
+      statistics?.notebooks?.total ?? null;
 
-  const failedPapers =
-    statistics?.papers?.failed ?? null;
+    const totalChats =
+      statistics?.chats?.total ?? null;
 
 
   return (
@@ -214,7 +215,7 @@ function AdminDashboard() {
 
       {/* ================= STATISTICS ================= */}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
 
         <StatCard
           icon={Users}
@@ -261,14 +262,17 @@ function AdminDashboard() {
 
 
         <StatCard
-          icon={Loader2}
-          label="Processing Papers"
-          value={displayValue(processingPapers)}
-          description={
-            failedPapers !== null
-              ? `${failedPapers} failed analysis`
-              : "Processing information unavailable"
-          }
+          icon={BookOpen}
+          label="Total Notebooks"
+          value={displayValue(totalNotebooks)}
+          description="Notebooks created by all users"
+        />
+
+        <StatCard
+          icon={MessageSquare}
+          label="Total Chats"
+          value={displayValue(totalChats)}
+          description="Notebook chats across all users"
         />
 
       </div>
@@ -527,33 +531,26 @@ function AdminDashboard() {
             </div>
 
 
-            {/* Processing */}
-
+            {/* Total notebooks */}
             <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-slate-950/70 px-4 py-3">
-
               <span className="text-sm text-slate-400">
-                Processing
+                Total Notebooks
               </span>
 
-              <span className="text-sm font-medium text-amber-300">
-                {displayValue(processingPapers)}
+              <span className="text-sm font-medium text-indigo-300">
+                {displayValue(totalNotebooks)}
               </span>
-
             </div>
 
-
-            {/* Failed */}
-
+            {/* Total chats */}
             <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-slate-950/70 px-4 py-3">
-
               <span className="text-sm text-slate-400">
-                Failed Analysis
+                Total Chats
               </span>
 
-              <span className="text-sm font-medium text-red-300">
-                {displayValue(failedPapers)}
+              <span className="text-sm font-medium text-cyan-300">
+                {displayValue(totalChats)}
               </span>
-
             </div>
 
 

@@ -7,15 +7,12 @@ from dotenv import load_dotenv
 from pymongo import ASCENDING, DESCENDING, MongoClient
 
 
-# Load project configuration for local development.
-# In Docker, the variables are supplied by docker-compose.yml.
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 load_dotenv(PROJECT_ROOT / ".env", override=False)
 load_dotenv(PROJECT_ROOT / "backend" / ".env", override=False)
 
 
 def build_mongo_url() -> str:
-    # An explicitly configured connection string takes precedence.
     configured_url = os.getenv("MONGO_URL")
     if configured_url:
         return configured_url
@@ -46,14 +43,17 @@ client = MongoClient(
 
 db = client["scibrain"]
 
-# Paper collection
+# Core collections
 papers_collection = db["papers"]
-
-# Persistent research notebooks
 notebooks_collection = db["notebooks"]
-
-# Persistent notebook conversations
 notebook_chats_collection = db["notebook_chats"]
+knowledge_graphs_collection = db["knowledge_graphs"]
+
+# Research Gaps collections
+research_gap_analyses_collection = db["research_gap_analyses"]
+research_gap_source_selections_collection = db[
+    "research_gap_source_selections"
+]
 
 # Notebook indexes
 notebooks_collection.create_index(
@@ -93,4 +93,29 @@ notebook_chats_collection.create_index(
         ("user_id", ASCENDING),
         ("updated_at", DESCENDING),
     ]
+)
+
+# Saved Research Gaps analysis indexes
+research_gap_analyses_collection.create_index(
+    [("analysis_id", ASCENDING)],
+    unique=True,
+)
+
+research_gap_analyses_collection.create_index(
+    [
+        ("user_id", ASCENDING),
+        ("notebook_id", ASCENDING),
+        ("created_at", DESCENDING),
+    ]
+)
+
+# Independent Research Gaps source-selection index.
+# Each user gets one independent selection per notebook.
+research_gap_source_selections_collection.create_index(
+    [
+        ("user_id", ASCENDING),
+        ("notebook_id", ASCENDING),
+    ],
+    unique=True,
+    name="unique_user_research_gap_source_selection",
 )

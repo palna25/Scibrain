@@ -414,22 +414,12 @@ def delete_paper_chunks(
     paper_id: str,
     ensure_exists: bool = True,
 ) -> None:
-    """
-    Remove all Qdrant chunks belonging to a research resource.
-
-    Used when:
-        - a paper is deleted
-        - a paper is re-indexed
-    """
+    """Remove all Qdrant chunks belonging to a research resource."""
 
     paper_id = str(paper_id)
 
     if ensure_exists:
-
-        existing_collections = (
-            qdrant_client.get_collections()
-        )
-
+        existing_collections = qdrant_client.get_collections()
         collection_names = {
             collection.name
             for collection in existing_collections.collections
@@ -444,54 +434,7 @@ def delete_paper_chunks(
             must=[
                 FieldCondition(
                     key="paper_id",
-                    match=MatchValue(
-                        value=paper_id,
-                    ),
-                )
-            ]
-        ),
-    )
-    # ============================================================
-# DELETE PAPER CHUNKS
-# ============================================================
-
-def delete_paper_chunks(
-    paper_id: str,
-    ensure_exists: bool = True,
-) -> None:
-    """
-    Remove all Qdrant chunks belonging to a research resource.
-
-    Used when:
-        - a paper is deleted
-        - a paper is re-indexed
-    """
-
-    paper_id = str(paper_id)
-
-    if ensure_exists:
-
-        existing_collections = (
-            qdrant_client.get_collections()
-        )
-
-        collection_names = {
-            collection.name
-            for collection in existing_collections.collections
-        }
-
-        if QDRANT_COLLECTION not in collection_names:
-            return
-
-    qdrant_client.delete(
-        collection_name=QDRANT_COLLECTION,
-        points_selector=Filter(
-            must=[
-                FieldCondition(
-                    key="paper_id",
-                    match=MatchValue(
-                        value=paper_id,
-                    ),
+                    match=MatchValue(value=paper_id),
                 )
             ]
         ),

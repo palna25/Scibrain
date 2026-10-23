@@ -6,10 +6,11 @@ import {
   FileText,
   LogOut,
   ShieldCheck,
+  Settings,
+
 } from "lucide-react";
 
-import Topbar from "./Topbar";
-
+import AdminTopbar from "./AdminTopbar";
 
 function AdminLayout({ children }) {
   const navigate = useNavigate();
@@ -37,6 +38,11 @@ function AdminLayout({ children }) {
       path: "/admin/papers",
       icon: FileText,
     },
+    {
+  name: "Settings",
+  path: "/admin/settings",
+  icon: Settings,
+},
   ];
 
   return (
@@ -181,7 +187,7 @@ function AdminLayout({ children }) {
 
         {/* Shared SciBrain Topbar */}
 
-        <Topbar />
+        <AdminTopbar />
 
 
         {/* Page Content */}

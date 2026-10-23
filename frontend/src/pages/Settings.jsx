@@ -371,8 +371,8 @@ function Settings() {
             </h3>
 
             <p className="mt-2 text-xs leading-5 text-slate-600">
-              Your personal environment for exploring papers, research
-              relationships, contradictions and research gaps.
+              Your personal environment for exploring papers, research notebooks, chats, 
+              research relationships, and research gaps.
             </p>
 
           </div>

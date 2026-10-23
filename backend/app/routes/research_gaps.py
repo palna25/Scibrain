@@ -1,10 +1,16 @@
 import re
+import uuid
+from datetime import datetime, timezone
 from typing import Any, Dict, List
-
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-
-from app.database.mongodb import papers_collection
+from app.core.dependencies import get_current_user_id
+from app.database.mongodb import (
+    papers_collection,
+    notebooks_collection,
+    research_gap_analyses_collection,
+    research_gap_source_selections_collection,
+)
 from app.services.vector_store import search_paper_chunks
 from app.services.gemini import call_gemini_json
 
@@ -47,8 +53,176 @@ MAX_FINAL_GAPS = 3
 
 class ResearchGapRequest(BaseModel):
     resource_ids: List[str]
+    notebook_id: str = ""
+class ResearchGapSourceSelectionRequest(BaseModel):
+    notebook_id: str
+    resource_ids: List[str]
+def serialize_saved_analysis(analysis: dict) -> dict:
+    """Return a saved analysis in a frontend-safe format."""
+    return {
+        "analysis_id": analysis.get("analysis_id"),
+        "notebook_id": analysis.get("notebook_id"),
+        "title": analysis.get("title", "Research Gap Analysis"),
+        "resource_ids": analysis.get("resource_ids", []),
+        "gaps": analysis.get("gaps", []),
+        "meta": analysis.get("meta", {}),
+        "created_at": analysis.get("created_at"),
+        "updated_at": analysis.get("updated_at"),
+    }
 
 
+def persist_analysis_response(
+    response: dict,
+    user_id: str,
+    notebook_id: str,
+    resource_ids: List[str],
+    notebook_title: str,
+) -> dict:
+    """
+    Save a completed analysis as a new snapshot.
+
+    Every analysis receives its own ID, so earlier results
+    are preserved when a new analysis is run.
+    """
+    if not notebook_id:
+        response["saved"] = False
+        return response
+
+    now = datetime.now(timezone.utc)
+    analysis_id = str(uuid.uuid4())
+
+    document = {
+        "analysis_id": analysis_id,
+        "user_id": str(user_id),
+        "notebook_id": notebook_id,
+        "title": f"{notebook_title} — Research Gaps",
+        "resource_ids": resource_ids,
+        "gaps": response.get("gaps", []),
+        "meta": response.get("meta", {}),
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    try:
+        research_gap_analyses_collection.insert_one(document)
+
+        response["analysis_id"] = analysis_id
+        response["saved"] = True
+
+    except Exception as exc:
+        # Preserve the generated result even if saving fails.
+        print(
+            "[Research Gaps] Failed to save analysis "
+            f"for notebook {notebook_id}: {exc}"
+        )
+        response["saved"] = False
+
+    return response
+@router.get("/saved")
+def get_saved_research_gap_analyses(
+    notebook_id: str,
+    user_id: str = Depends(get_current_user_id),
+):
+    """List saved analyses belonging to the current user and notebook."""
+
+    notebook_id = notebook_id.strip()
+    owner_id = str(user_id)
+
+    notebook = notebooks_collection.find_one(
+        {
+            "notebook_id": notebook_id,
+            "user_id": owner_id,
+        },
+        {"_id": 0, "notebook_id": 1},
+    )
+
+    if not notebook:
+        raise HTTPException(
+            status_code=404,
+            detail="Research notebook not found.",
+        )
+
+    cursor = research_gap_analyses_collection.find(
+        {
+            "user_id": owner_id,
+            "notebook_id": notebook_id,
+        },
+        {
+            "_id": 0,
+            "analysis_id": 1,
+            "notebook_id": 1,
+            "title": 1,
+            "resource_ids": 1,
+            "meta": 1,
+            "created_at": 1,
+            "updated_at": 1,
+        },
+    ).sort("created_at", -1)
+
+    analyses = []
+
+    for item in cursor:
+        analyses.append({
+            **item,
+            "gap_count": item.get("meta", {}).get(
+                "validated_gaps",
+                0,
+            ),
+        })
+
+    return {"analyses": analyses}
+
+
+@router.get("/saved/{analysis_id}")
+def get_saved_research_gap_analysis(
+    analysis_id: str,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Load a saved result without rerunning Gemini."""
+
+    analysis = research_gap_analyses_collection.find_one(
+        {
+            "analysis_id": analysis_id,
+            "user_id": str(user_id),
+        },
+        {"_id": 0},
+    )
+
+    if not analysis:
+        raise HTTPException(
+            status_code=404,
+            detail="Saved research gap analysis not found.",
+        )
+
+    return {
+        "analysis": serialize_saved_analysis(analysis),
+    }
+
+
+@router.delete("/saved/{analysis_id}")
+def delete_saved_research_gap_analysis(
+    analysis_id: str,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Delete a saved analysis owned by the current user."""
+
+    result = research_gap_analyses_collection.delete_one(
+        {
+            "analysis_id": analysis_id,
+            "user_id": str(user_id),
+        }
+    )
+
+    if result.deleted_count == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="Saved research gap analysis not found.",
+        )
+
+    return {
+        "message": "Saved research gap analysis deleted successfully.",
+        "analysis_id": analysis_id,
+    }
 # ============================================================
 # BASIC HELPERS
 # ============================================================
@@ -1873,7 +2047,147 @@ def validate_final_gaps(
 
     return validated
 
+@router.get("/sources")
+def get_research_gap_sources(
+    notebook_id: str,
+    user_id: str = Depends(get_current_user_id),
+):
+    owner_id = str(user_id)
+    notebook_id = notebook_id.strip()
 
+    notebook = notebooks_collection.find_one(
+        {
+            "notebook_id": notebook_id,
+            "user_id": owner_id,
+        },
+        {
+            "_id": 0,
+            "notebook_id": 1,
+            "resource_ids": 1,
+        },
+    )
+
+    if not notebook:
+        raise HTTPException(
+            status_code=404,
+            detail="Research notebook not found.",
+        )
+
+    saved = research_gap_source_selections_collection.find_one(
+        {
+            "user_id": owner_id,
+            "notebook_id": notebook_id,
+        },
+        {
+            "_id": 0,
+            "resource_ids": 1,
+        },
+    )
+
+    # Use the notebook selection only as the initial default.
+    # Do not modify the notebook itself.
+    if saved is not None:
+        resource_ids = saved.get("resource_ids", [])
+    else:
+        resource_ids = notebook.get("resource_ids", [])
+
+    resource_ids = list(
+        dict.fromkeys(
+            str(item).strip()
+            for item in resource_ids
+            if str(item).strip()
+        )
+    )
+
+    return {
+        "notebook_id": notebook_id,
+        "resource_ids": resource_ids,
+    }
+
+
+@router.put("/sources")
+def save_research_gap_sources(
+    request: ResearchGapSourceSelectionRequest,
+    user_id: str = Depends(get_current_user_id),
+):
+    owner_id = str(user_id)
+    notebook_id = request.notebook_id.strip()
+
+    notebook = notebooks_collection.find_one(
+        {
+            "notebook_id": notebook_id,
+            "user_id": owner_id,
+        },
+        {
+            "_id": 0,
+            "notebook_id": 1,
+        },
+    )
+
+    if not notebook:
+        raise HTTPException(
+            status_code=404,
+            detail="Research notebook not found.",
+        )
+
+    resource_ids = list(
+        dict.fromkeys(
+            str(item).strip()
+            for item in request.resource_ids
+            if str(item).strip()
+        )
+    )
+
+    if resource_ids:
+        existing_ids = {
+            str(paper["_id"])
+            for paper in papers_collection.find(
+                {"_id": {"$in": resource_ids}},
+                {"_id": 1},
+            )
+        }
+
+        missing_ids = [
+            resource_id
+            for resource_id in resource_ids
+            if resource_id not in existing_ids
+        ]
+
+        if missing_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Some selected research sources no longer exist. "
+                    "Refresh the paper list and try again."
+                ),
+            )
+
+    now = datetime.now(timezone.utc)
+
+    research_gap_source_selections_collection.update_one(
+        {
+            "user_id": owner_id,
+            "notebook_id": notebook_id,
+        },
+        {
+            "$set": {
+                "resource_ids": resource_ids,
+                "updated_at": now,
+            },
+            "$setOnInsert": {
+                "user_id": owner_id,
+                "notebook_id": notebook_id,
+                "created_at": now,
+            },
+        },
+        upsert=True,
+    )
+
+    return {
+        "message": "Research Gaps sources saved.",
+        "notebook_id": notebook_id,
+        "resource_ids": resource_ids,
+    }
 # ============================================================
 # API ENDPOINT
 # ============================================================
@@ -1881,29 +2195,142 @@ def validate_final_gaps(
 @router.post("/analyze")
 def analyze_research_gaps(
     request: ResearchGapRequest,
+    user_id: str = Depends(get_current_user_id),
+
 ):
 
+        # --------------------------------------------------------
+    # Validate request and ownership
     # --------------------------------------------------------
-    # Validate request
-    # --------------------------------------------------------
 
-    resource_ids = [
-        str(resource_id).strip()
-        for resource_id in request.resource_ids
-        if str(resource_id).strip()
-    ]
+    owner_id = str(user_id)
+    notebook_id = normalize_text(request.notebook_id)
 
-    if not resource_ids:
+    # Normalize and deduplicate requested resource IDs.
+    requested_resource_ids = list(
+        dict.fromkeys(
+            str(resource_id).strip()
+            for resource_id in request.resource_ids
+            if str(resource_id).strip()
+        )
+    )
 
+    if not requested_resource_ids:
         raise HTTPException(
             status_code=400,
-            detail="At least one research resource is required.",
+            detail="Select at least one research paper before analyzing.",
         )
 
-    # Remove duplicate paper IDs while preserving order.
-    resource_ids = list(
-        dict.fromkeys(resource_ids)
-    )
+    notebook_title = "Research Notebook"
+
+    if notebook_id:
+        notebook = notebooks_collection.find_one(
+            {
+                "notebook_id": notebook_id,
+                "user_id": owner_id,
+            },
+            {
+                "_id": 0,
+                "title": 1,
+            },
+        )
+
+        if not notebook:
+            raise HTTPException(
+                status_code=404,
+                detail="Research notebook not found.",
+            )
+
+        notebook_title = (
+            notebook.get("title") or "Research Notebook"
+        )
+
+        # Research Gaps has its own source selection.
+        # Never use the notebook's current resource_ids here.
+        saved_selection = research_gap_source_selections_collection.find_one(
+            {
+                "user_id": owner_id,
+                "notebook_id": notebook_id,
+            },
+            {
+                "_id": 0,
+                "resource_ids": 1,
+            },
+        )
+
+        # A missing saved selection is treated as an empty selection.
+        # The GET /sources endpoint provides the notebook's sources
+        # as the initial default, and PUT /sources persists the choice.
+        if saved_selection is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Research Gaps sources have not been saved yet. "
+                    "Open Manage Sources and save your selection first."
+                ),
+            )
+
+        saved_resource_ids = list(
+            dict.fromkeys(
+                str(resource_id).strip()
+                for resource_id in saved_selection.get(
+                    "resource_ids", []
+                )
+                if str(resource_id).strip()
+            )
+        )
+
+        # Require the request to match the saved selection exactly,
+        # regardless of order.
+        if set(requested_resource_ids) != set(saved_resource_ids):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "The requested papers do not match the saved "
+                    "Research Gaps source selection. Refresh your "
+                    "selection and try again."
+                ),
+            )
+
+        resource_ids = saved_resource_ids
+
+    else:
+        # Preserve compatibility with requests that do not belong
+        # to a notebook. These requests cannot save notebook analyses.
+        resource_ids = requested_resource_ids
+
+    # Validate that every selected paper still exists.
+    existing_ids = {
+        str(paper["_id"])
+        for paper in papers_collection.find(
+            {"_id": {"$in": resource_ids}},
+            {"_id": 1},
+        )
+    }
+
+    missing_ids = [
+        resource_id
+        for resource_id in resource_ids
+        if resource_id not in existing_ids
+    ]
+
+    if missing_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Some selected research sources could not be found. "
+                "Refresh your sources and try again."
+            ),
+        )
+
+    def finish_analysis(response: dict) -> dict:
+        return persist_analysis_response(
+            response=response,
+            user_id=owner_id,
+            notebook_id=notebook_id,
+            resource_ids=resource_ids,
+            notebook_title=notebook_title,
+        )
 
     # --------------------------------------------------------
     # Metadata
@@ -2003,87 +2430,63 @@ def analyze_research_gaps(
             }
         )
 
+   
     # --------------------------------------------------------
     # No retrieval
     # --------------------------------------------------------
 
     if not all_chunks:
-
-        return {
+        return finish_analysis({
             "gaps": [],
             "meta": {
-                "requested_resources": len(
-                    resource_ids
-                ),
+                "requested_resources": len(resource_ids),
                 "retrieved_chunks": 0,
                 "gap_evidence_chunks": 0,
                 "candidate_gaps": 0,
                 "validated_gaps": 0,
                 "papers_analyzed": 0,
             },
-        }
+        })
 
     # --------------------------------------------------------
     # No gap-bearing evidence
     # --------------------------------------------------------
 
     if not all_gap_evidence_chunks:
-
-        return {
+        return finish_analysis({
             "gaps": [],
             "meta": {
-                "requested_resources": len(
-                    resource_ids
-                ),
-                "retrieved_chunks": len(
-                    all_chunks
-                ),
+                "requested_resources": len(resource_ids),
+                "retrieved_chunks": len(all_chunks),
                 "gap_evidence_chunks": 0,
                 "candidate_gaps": 0,
                 "validated_gaps": 0,
-                "papers_analyzed": len(
-                    paper_results
-                ),
+                "papers_analyzed": len(paper_results),
                 "paper_results": paper_results,
             },
-        }
+        })
 
     # --------------------------------------------------------
     # No candidate gaps
     # --------------------------------------------------------
 
     if not all_candidates:
-
-        return {
+        return finish_analysis({
             "gaps": [],
             "meta": {
-                "requested_resources": len(
-                    resource_ids
-                ),
-                "retrieved_chunks": len(
-                    all_chunks
-                ),
-                "gap_evidence_chunks": len(
-                    all_gap_evidence_chunks
-                ),
+                "requested_resources": len(resource_ids),
+                "retrieved_chunks": len(all_chunks),
+                "gap_evidence_chunks": len(all_gap_evidence_chunks),
                 "candidate_gaps": 0,
                 "validated_gaps": 0,
-                "papers_analyzed": len(
-                    paper_results
-                ),
+                "papers_analyzed": len(paper_results),
                 "paper_results": paper_results,
             },
-        }
+        })
 
     # --------------------------------------------------------
-    # Stage 3:
-    # Cross-paper synthesis
+    # Stage 3: Gap qualification / cross-paper verification
     # --------------------------------------------------------
-
-    # --------------------------------------------------------
-# Stage 3:
-# Gap Qualification / Cross-Paper Verification
-# --------------------------------------------------------
 
     qualified_candidates = qualify_candidate_gaps(
         candidates=all_candidates,
@@ -2095,34 +2498,22 @@ def analyze_research_gaps(
     # --------------------------------------------------------
 
     if not qualified_candidates:
-
-        return {
+        return finish_analysis({
             "gaps": [],
             "meta": {
-                "requested_resources": len(
-                    resource_ids
-                ),
-                "papers_analyzed": len(
-                    paper_results
-                ),
-                "retrieved_chunks": len(
-                    all_chunks
-                ),
-                "gap_evidence_chunks": len(
-                    all_gap_evidence_chunks
-                ),
-                "candidate_gaps": len(
-                    all_candidates
-                ),
+                "requested_resources": len(resource_ids),
+                "papers_analyzed": len(paper_results),
+                "retrieved_chunks": len(all_chunks),
+                "gap_evidence_chunks": len(all_gap_evidence_chunks),
+                "candidate_gaps": len(all_candidates),
                 "qualified_gaps": 0,
                 "validated_gaps": 0,
                 "paper_results": paper_results,
             },
-        }
+        })
 
     # --------------------------------------------------------
-    # Stage 4:
-    # Final synthesis
+    # Stage 4: Final synthesis
     # --------------------------------------------------------
 
     final_gaps = synthesize_research_gaps(
@@ -2141,34 +2532,19 @@ def analyze_research_gaps(
     )
 
     # --------------------------------------------------------
-    # Response
+    # Final response and persistence
     # --------------------------------------------------------
 
-    return {
+    return finish_analysis({
         "gaps": validated_gaps,
         "meta": {
-            "requested_resources": len(
-                resource_ids
-            ),
-            "papers_analyzed": len(
-                paper_results
-            ),
-            "retrieved_chunks": len(
-                all_chunks
-            ),
-            "gap_evidence_chunks": len(
-                all_gap_evidence_chunks
-            ),
-            "candidate_gaps": len(
-                all_candidates
-            ),
-            "qualified_gaps": len(
-                qualified_candidates
-            ),
-
-            "validated_gaps": len(
-                validated_gaps
-            ),
+            "requested_resources": len(resource_ids),
+            "papers_analyzed": len(paper_results),
+            "retrieved_chunks": len(all_chunks),
+            "gap_evidence_chunks": len(all_gap_evidence_chunks),
+            "candidate_gaps": len(all_candidates),
+            "qualified_gaps": len(qualified_candidates),
+            "validated_gaps": len(validated_gaps),
             "paper_results": paper_results,
         },
-    }
+    })

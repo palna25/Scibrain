@@ -1,12 +1,13 @@
 from pathlib import Path
-
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.database.postgres import get_db
-from app.database.mongodb import papers_collection
+from app.database.mongodb import (papers_collection,notebooks_collection,
+    notebook_chats_collection)
 from app.models.user import User
 from app.core.dependencies import get_current_admin
 from app.services.vector_store import delete_paper_chunks
@@ -17,7 +18,7 @@ router = APIRouter(
     tags=["Admin"],
 )
 
-
+logger = logging.getLogger(__name__)
 # ==========================================================
 # ADMIN DASHBOARD STATISTICS
 # ==========================================================
@@ -42,14 +43,8 @@ def get_admin_statistics(
     analyzed_papers = papers_collection.count_documents({
         "status": "ready",
     })
-
-    processing_papers = papers_collection.count_documents({
-        "status": "processing",
-    })
-
-    failed_papers = papers_collection.count_documents({
-        "status": "error",
-    })
+    total_notebooks = notebooks_collection.count_documents({})
+    total_chats = notebook_chats_collection.count_documents({})
 
     return {
         "users": {
@@ -59,8 +54,13 @@ def get_admin_statistics(
         "papers": {
             "total": total_papers,
             "analyzed": analyzed_papers,
-            "processing": processing_papers,
-            "failed": failed_papers,
+            
+        },
+        "notebooks": {
+            "total": total_notebooks,
+        },
+        "chats": {
+            "total": total_chats,
         },
     }
 
@@ -245,14 +245,13 @@ def get_admin_papers(
 # DELETE PAPER
 # ==========================================================
 
+
 @router.delete("/papers/{paper_id}")
 def delete_paper(
     paper_id: str,
     admin: User = Depends(get_current_admin),
 ):
-    paper = papers_collection.find_one({
-        "_id": paper_id,
-    })
+    paper = papers_collection.find_one({"_id": paper_id})
 
     if not paper:
         raise HTTPException(
@@ -260,46 +259,66 @@ def delete_paper(
             detail="Paper not found.",
         )
 
+    stage = "Qdrant chunk cleanup"
+
     try:
-        # Remove the paper's indexed chunks from Qdrant first.
+        # 1. Remove indexed chunks first.
+        # If this fails, retain the PDF and MongoDB record.
         delete_paper_chunks(paper_id=paper_id)
 
-        # Remove the stored PDF if the paper has a saved file path.
+        # 2. Remove the stored PDF, if one is recorded.
+        stage = "stored PDF cleanup"
         stored_path = paper.get("file_path")
 
         if stored_path:
+            backend_root = Path(__file__).resolve().parents[2]
+            upload_dir = (backend_root / "uploads" / "papers").resolve()
+
             pdf_path = Path(stored_path)
 
+            if not pdf_path.is_absolute():
+                pdf_path = backend_root / pdf_path
+
+            pdf_path = pdf_path.resolve()
+
+            # Never allow a database path to delete files
+            # outside the papers upload directory.
+            try:
+                pdf_path.relative_to(upload_dir)
+            except ValueError as error:
+                raise RuntimeError(
+                    "The stored PDF path is outside the papers upload directory."
+                ) from error
+
+            # A missing PDF is okay during a retry.
             if pdf_path.is_file():
                 pdf_path.unlink()
 
-        # Delete the MongoDB document after the cleanup steps succeed.
-        result = papers_collection.delete_one({
-            "_id": paper_id,
-        })
+        # 3. Delete the MongoDB record last.
+        stage = "MongoDB record deletion"
+        result = papers_collection.delete_one({"_id": paper_id})
 
         if result.deleted_count != 1:
-            raise HTTPException(
-                status_code=500,
-                detail=(
-                    "The paper cleanup ran, but the database "
-                    "record could not be deleted. Please verify "
-                    "the paper before retrying."
-                ),
+            raise RuntimeError(
+                "MongoDB did not delete exactly one paper record."
             )
 
-    except HTTPException:
-        raise
-    except Exception:
+    except Exception as error:
+        logger.exception(
+            "Paper deletion failed for %s during %s",
+            paper_id,
+            stage,
+        )
+
         raise HTTPException(
             status_code=500,
             detail=(
-                "Failed to delete the paper and complete its cleanup. "
-                "Verify the paper's stored file and vector data "
-                "before retrying."
+                f"Paper deletion failed during {stage}. "
+                "Some cleanup steps may already have succeeded. "
+                "Check the backend logs before retrying."
             ),
-        )
+        ) from error
 
     return {
-        "message": "Paper and associated stored data deleted successfully.",
+        "message": "Paper and associated stored data deleted successfully."
     }

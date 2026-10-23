@@ -10,6 +10,8 @@ from app.core.dependencies import get_current_user_id
 from app.database.mongodb import (
     notebook_chats_collection,
     notebooks_collection,
+    knowledge_graphs_collection,
+
 )
 from app.services.gemini import call_gemini
 from app.services.vector_store import search_paper_chunks
@@ -1022,7 +1024,12 @@ def delete_notebook(
             "user_id": str(user_id),
         }
     )
-
+    knowledge_graphs_collection.delete_many(
+    {
+        "notebook_id": notebook_id,
+        "user_id": str(user_id),
+    }
+)
     return {
         "message": "Notebook deleted successfully.",
         "notebook_id": notebook_id,

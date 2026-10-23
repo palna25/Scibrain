@@ -1,4 +1,4 @@
-/* import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -13,7 +13,7 @@ import {
   X,
 } from "lucide-react";
 
-import AdminLayout from "../components/AdminLayout";
+import AdminLayout from "../../components/AdminLayout";
 
 const API_BASE_URL = "http://127.0.0.1:8000";
 
@@ -637,4 +637,3 @@ async function updateUserStatus(user) {
     </AdminLayout>
   );
 }
- */

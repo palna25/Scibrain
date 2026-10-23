@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate,useLocation, useParams } from "react-router-dom";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   BookOpen,
+  Check,
   ChevronRight,
   FileText,
   Loader2,
@@ -13,10 +15,11 @@ import {
   ZoomOut,
   Maximize2,
   X,
+  Save,
+  RotateCcw,
 } from "lucide-react";
 
 import AppLayout from "../components/AppLayout";
-import { useResearchContext } from "../context/ResearchContext";
 
 const API_URL = "http://127.0.0.1:8000";
 const ACTIVE_NOTEBOOK_KEY = "scibrain_active_notebook_id";
@@ -39,256 +42,228 @@ const NODE_TYPES = [
 ];
 
 const NODE_STYLES = {
-  paper: {
-    fill: "fill-indigo-500/20",
-    stroke: "stroke-indigo-400",
-    dot: "fill-indigo-400",
-    text: "text-indigo-300",
-    hex: "#818cf8",
-  },
-  author: {
-    fill: "fill-cyan-500/15",
-    stroke: "stroke-cyan-400",
-    dot: "fill-cyan-400",
-    text: "text-cyan-300",
-    hex: "#22d3ee",
-  },
-  method: {
-    fill: "fill-violet-500/15",
-    stroke: "stroke-violet-400",
-    dot: "fill-violet-400",
-    text: "text-violet-300",
-    hex: "#a78bfa",
-  },
-  dataset: {
-    fill: "fill-emerald-500/15",
-    stroke: "stroke-emerald-400",
-    dot: "fill-emerald-400",
-    text: "text-emerald-300",
-    hex: "#34d399",
-  },
-  metric: {
-    fill: "fill-amber-500/15",
-    stroke: "stroke-amber-400",
-    dot: "fill-amber-400",
-    text: "text-amber-300",
-    hex: "#fbbf24",
-  },
-  concept: {
-    fill: "fill-sky-500/15",
-    stroke: "stroke-sky-400",
-    dot: "fill-sky-400",
-    text: "text-sky-300",
-    hex: "#38bdf8",
-  },
-  finding: {
-    fill: "fill-green-500/15",
-    stroke: "stroke-green-400",
-    dot: "fill-green-400",
-    text: "text-green-300",
-    hex: "#4ade80",
-  },
-  limitation: {
-    fill: "fill-red-500/15",
-    stroke: "stroke-red-400",
-    dot: "fill-red-400",
-    text: "text-red-300",
-    hex: "#f87171",
-  },
-  future_work: {
-    fill: "fill-orange-500/15",
-    stroke: "stroke-orange-400",
-    dot: "fill-orange-400",
-    text: "text-orange-300",
-    hex: "#fb923c",
-  },
-  problem: {
-    fill: "fill-pink-500/15",
-    stroke: "stroke-pink-400",
-    dot: "fill-pink-400",
-    text: "text-pink-300",
-    hex: "#f472b6",
-  },
-  organization: {
-    fill: "fill-blue-500/15",
-    stroke: "stroke-blue-400",
-    dot: "fill-blue-400",
-    text: "text-blue-300",
-    hex: "#60a5fa",
-  },
-  tool: {
-    fill: "fill-teal-500/15",
-    stroke: "stroke-teal-400",
-    dot: "fill-teal-400",
-    text: "text-teal-300",
-    hex: "#2dd4bf",
-  },
-  model: {
-    fill: "fill-purple-500/15",
-    stroke: "stroke-purple-400",
-    dot: "fill-purple-400",
-    text: "text-purple-300",
-    hex: "#c084fc",
-  },
+  paper: { hex: "#4f46e5", text: "text-indigo-700", fill: "bg-indigo-50" },
+  author: { hex: "#0891b2", text: "text-cyan-700", fill: "bg-cyan-50" },
+  method: { hex: "#7c3aed", text: "text-violet-700", fill: "bg-violet-50" },
+  dataset: { hex: "#059669", text: "text-emerald-700", fill: "bg-emerald-50" },
+  metric: { hex: "#d97706", text: "text-amber-700", fill: "bg-amber-50" },
+  concept: { hex: "#0284c7", text: "text-sky-700", fill: "bg-sky-50" },
+  finding: { hex: "#16a34a", text: "text-green-700", fill: "bg-green-50" },
+  limitation: { hex: "#dc2626", text: "text-red-700", fill: "bg-red-50" },
+  future_work: { hex: "#ea580c", text: "text-orange-700", fill: "bg-orange-50" },
+  problem: { hex: "#db2777", text: "text-pink-700", fill: "bg-pink-50" },
+  organization: { hex: "#2563eb", text: "text-blue-700", fill: "bg-blue-50" },
+  tool: { hex: "#0d9488", text: "text-teal-700", fill: "bg-teal-50" },
+  model: { hex: "#9333ea", text: "text-purple-700", fill: "bg-purple-50" },
 };
 
 function getAuthHeaders() {
   const token = localStorage.getItem("scibrain_token");
-
-  return token
-    ? { Authorization: `Bearer ${token}` }
-    : {};
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 function getPaperId(paper) {
-  return String(
-    paper?.id ??
-      paper?.paper_id ??
-      paper?._id ??
-      ""
-  );
+  return String(paper?.id ?? paper?.paper_id ?? paper?._id ?? "");
+}
+
+async function apiRequest(path, options = {}) {
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: {
+      ...getAuthHeaders(),
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.headers || {}),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const message =
+      typeof data?.detail === "string"
+        ? data.detail
+        : typeof data?.message === "string"
+          ? data.message
+          : `Request failed (${response.status}).`;
+
+    throw new Error(message);
+  }
+
+  return data;
+}
+
+function getNotebookId(item) {
+  return String(item?.notebook_id ?? item?.id ?? item?._id ?? "");
 }
 
 function KnowledgeGraph() {
+  const navigate = useNavigate();
   const location = useLocation();
   const { notebookId: routeNotebookId } = useParams();
- const notebookId = String(
-    location.state?.notebookId ||
-      routeNotebookId ||
-      sessionStorage.getItem(ACTIVE_NOTEBOOK_KEY) ||
-      ""
+
+  const [activeNotebookId, setActiveNotebookId] = useState(() =>
+    String(
+      location.state?.notebookId ||
+        routeNotebookId ||
+        sessionStorage.getItem(ACTIVE_NOTEBOOK_KEY) ||
+        ""
+    )
   );
 
-  // The active notebook is authoritative when this page is opened
-  // through /notebook/:notebookId/knowledge-graph.
-  // Global context is retained only for the legacy standalone route.
-  const {
-    selectedResourceIds: globalSelectedResourceIds = [],
-  } = useResearchContext();
+  const notebookId = activeNotebookId;
 
   const [notebook, setNotebook] = useState(null);
-  const [notebookLoaded, setNotebookLoaded] = useState(!notebookId);
+  const [notebookLoaded, setNotebookLoaded] = useState(false);
+  const [availableNotebooks, setAvailableNotebooks] = useState([]);
+  const [loadingNotebooks, setLoadingNotebooks] = useState(true);
 
   const [papers, setPapers] = useState([]);
   const [nodes, setNodes] = useState([]);
   const [edges, setEdges] = useState([]);
-
   const [selectedNode, setSelectedNode] = useState(null);
 
   const [loadingPapers, setLoadingPapers] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [savingGraph, setSavingGraph] = useState(false);
+  const [savedGraph, setSavedGraph] = useState(false);
+  const [savedGraphId, setSavedGraphId] = useState("");
 
   const [error, setError] = useState("");
-
+  const [notice, setNotice] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [nodeType, setNodeType] = useState("all");
   const [zoom, setZoom] = useState(1);
 
-  const backToNotebook = () => {
+  const backToNotebook = useCallback(() => {
     navigate(
       notebookId
         ? `/notebook/${encodeURIComponent(notebookId)}`
         : "/notebook"
     );
-  };
+  }, [navigate, notebookId]);
 
-   // --------------------------------------------------
-  // Load the active notebook
-  // --------------------------------------------------
+  const handleNotebookChange = useCallback((value) => {
+    const nextId = String(value || "");
 
+    setActiveNotebookId(nextId);
+    setNotebook(null);
+    setNodes([]);
+    setEdges([]);
+    setSelectedNode(null);
+    setSavedGraph(false);
+    setSavedGraphId("");
+    setError("");
+    setNotice("");
+    setSearchQuery("");
+    setNodeType("all");
+    setZoom(1);
+
+    if (nextId) {
+      sessionStorage.setItem(ACTIVE_NOTEBOOK_KEY, nextId);
+    } else {
+      sessionStorage.removeItem(ACTIVE_NOTEBOOK_KEY);
+    }
+  }, []);
+
+  // Keep the selected notebook synchronized with notebook-specific routes.
+  useEffect(() => {
+    const routeId = String(location.state?.notebookId || routeNotebookId || "");
+
+    if (routeId && routeId !== activeNotebookId) {
+      handleNotebookChange(routeId);
+    }
+  }, [
+    routeNotebookId,
+    location.state?.notebookId,
+    activeNotebookId,
+    handleNotebookChange,
+  ]);
+
+  // Load the notebook list so the page works when opened directly.
   useEffect(() => {
     let cancelled = false;
 
-    const loadNotebook = async () => {
+    async function loadNotebooks() {
+      setLoadingNotebooks(true);
+
+      try {
+        const data = await apiRequest("/api/notebook/");
+        const list = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.notebooks)
+            ? data.notebooks
+            : [];
+
+        if (!cancelled) {
+          setAvailableNotebooks(
+            list.filter((item) => getNotebookId(item))
+          );
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError((current) => current || err.message);
+        }
+      } finally {
+        if (!cancelled) setLoadingNotebooks(false);
+      }
+    }
+
+    loadNotebooks();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Load the active notebook. No notebook is a valid page state.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadNotebook() {
       setNotebookLoaded(false);
       setNotebook(null);
       setNodes([]);
       setEdges([]);
       setSelectedNode(null);
+      setSavedGraph(false);
+      setSavedGraphId("");
       setError("");
+      setNotice("");
 
       if (!notebookId) {
         setNotebookLoaded(true);
-        setError(
-          "No active research notebook was found. Open a notebook and launch Knowledge Graph from there."
-        );
         return;
       }
 
       try {
-        const response = await fetch(
-          `${API_URL}/api/notebook/${encodeURIComponent(notebookId)}`,
-          {
-            headers: getAuthHeaders(),
-          }
+        const data = await apiRequest(
+          `/api/notebook/${encodeURIComponent(notebookId)}`
         );
-
-        let data = null;
-
-        try {
-          data = await response.json();
-        } catch {
-          data = null;
-        }
-
-        if (response.status === 401) {
-          throw new Error(
-            "Your session has expired. Please sign in again."
-          );
-        }
-
-        if (response.status === 404) {
-          throw new Error(
-            "This research notebook could not be found."
-          );
-        }
-
-        if (!response.ok) {
-          throw new Error(
-            data?.detail ||
-              "Failed to load the research notebook."
-          );
-        }
 
         const loadedNotebook = data?.notebook;
 
         if (!loadedNotebook) {
-          throw new Error(
-            "The server did not return the requested notebook."
-          );
+          throw new Error("The server did not return the requested notebook.");
         }
 
         if (cancelled) return;
 
         setNotebook(loadedNotebook);
 
-        const savedNotebookId = String(
+        const confirmedId = String(
           loadedNotebook.notebook_id || notebookId
         );
 
-        sessionStorage.setItem(
-          ACTIVE_NOTEBOOK_KEY,
-          savedNotebookId
-        );
+        sessionStorage.setItem(ACTIVE_NOTEBOOK_KEY, confirmedId);
       } catch (err) {
         if (!cancelled) {
-          console.error(
-            "Knowledge Graph notebook loading error:",
-            err
-          );
-
           setNotebook(null);
-          setError(
-            err.message ||
-              "Failed to load the research notebook."
-          );
+          setError(err.message || "Failed to load the research notebook.");
         }
       } finally {
-        if (!cancelled) {
-          setNotebookLoaded(true);
-        }
+        if (!cancelled) setNotebookLoaded(true);
       }
-    };
+    }
 
     loadNotebook();
 
@@ -297,38 +272,15 @@ function KnowledgeGraph() {
     };
   }, [notebookId]);
 
-  // --------------------------------------------------
-  // Load research source metadata
-  // --------------------------------------------------
-
+  // Load available paper metadata.
   useEffect(() => {
     let cancelled = false;
 
-    const loadPapers = async () => {
+    async function loadPapers() {
       setLoadingPapers(true);
 
       try {
-        const response = await fetch(
-          `${API_URL}/api/papers/`,
-          {
-            headers: getAuthHeaders(),
-          }
-        );
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            throw new Error(
-              "Your session has expired. Please sign in again."
-            );
-          }
-
-          throw new Error(
-            "Failed to load research sources."
-          );
-        }
-
-        const data = await response.json();
-
+        const data = await apiRequest("/api/papers/");
         const rawPapers = Array.isArray(data)
           ? data
           : Array.isArray(data?.papers)
@@ -351,19 +303,12 @@ function KnowledgeGraph() {
         }
       } catch (err) {
         if (!cancelled) {
-          console.error(err);
-          setError((current) =>
-            current ||
-            err.message ||
-            "Failed to load research sources."
-          );
+          setError((current) => current || err.message);
         }
       } finally {
-        if (!cancelled) {
-          setLoadingPapers(false);
-        }
+        if (!cancelled) setLoadingPapers(false);
       }
-    };
+    }
 
     loadPapers();
 
@@ -372,22 +317,12 @@ function KnowledgeGraph() {
     };
   }, []);
 
-    // --------------------------------------------------
-  // Selected research sources
-  // The notebook's persisted source selection is the
-  // single source of truth, matching Research Gaps.
-  // --------------------------------------------------
-
   const selectedResourceIds = useMemo(() => {
     const ids = Array.isArray(notebook?.resource_ids)
       ? notebook.resource_ids
       : [];
 
-    return [
-      ...new Set(
-        ids.map(String).filter(Boolean)
-      ),
-    ];
+    return [...new Set(ids.map(String).filter(Boolean))];
   }, [notebook]);
 
   const selectedIdSet = useMemo(
@@ -396,10 +331,7 @@ function KnowledgeGraph() {
   );
 
   const selectedPapers = useMemo(
-    () =>
-      papers.filter((paper) =>
-        selectedIdSet.has(String(paper.id))
-      ),
+    () => papers.filter((paper) => selectedIdSet.has(String(paper.id))),
     [papers, selectedIdSet]
   );
 
@@ -408,49 +340,94 @@ function KnowledgeGraph() {
     selectedResourceIds.length - selectedPapers.length
   );
 
-  // --------------------------------------------------
-  // Filter nodes
-  // --------------------------------------------------
+  // Load the saved snapshot for this notebook, if one exists.
+  // These calls require the corresponding backend endpoints.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSavedGraph() {
+      if (!notebookId || !notebookLoaded || !notebook) return;
+
+      try {
+        const listData = await apiRequest("/api/knowledge-graph/saved");
+        const savedGraphs = Array.isArray(listData?.graphs)
+          ? listData.graphs
+          : [];
+
+        const match = savedGraphs.find(
+          (item) => String(item.notebook_id) === String(notebookId)
+        );
+
+        if (!match) {
+          if (!cancelled) {
+            setSavedGraph(false);
+            setSavedGraphId("");
+            setNodes([]);
+            setEdges([]);
+            setSelectedNode(null);
+          }
+          return;
+        }
+
+        const graphId = String(match.graph_id || match.id || "");
+
+        if (!graphId) {
+          throw new Error("The saved graph response is missing its graph ID.");
+        }
+
+        const graphData = await apiRequest(
+          `/api/knowledge-graph/saved/${encodeURIComponent(graphId)}`
+        );
+
+        if (cancelled) return;
+
+        const graph = graphData?.graph || graphData || {};
+
+        setNodes(Array.isArray(graph.nodes) ? graph.nodes : []);
+        setEdges(Array.isArray(graph.edges) ? graph.edges : []);
+        setSavedGraph(true);
+        setSavedGraphId(graphId);
+        setSelectedNode(null);
+        setZoom(1);
+      } catch (err) {
+        if (cancelled) return;
+
+        // Do not silently label an unsaved graph as saved.
+        setSavedGraph(false);
+        setSavedGraphId("");
+
+        // A missing save API should not prevent the page from being used.
+        console.warn("Could not load a saved knowledge graph:", err.message);
+      }
+    }
+
+    loadSavedGraph();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [notebookId, notebookLoaded, notebook]);
 
   const filteredNodes = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
     return nodes.filter((node) => {
-      const name = String(
-        node.name || ""
-      ).toLowerCase();
+      const matchesType = nodeType === "all" || node.type === nodeType;
+      const searchable = [
+        node.name,
+        node.description,
+        node.type,
+      ]
+        .map((value) => String(value || ""))
+        .join(" ")
+        .toLowerCase();
 
-      const type = String(
-        node.type || ""
-      ).toLowerCase();
-
-      const description = String(
-        node.description || ""
-      ).toLowerCase();
-
-      const matchesType =
-        nodeType === "all" ||
-        type === nodeType;
-
-      const matchesSearch =
-        !query ||
-        name.includes(query) ||
-        description.includes(query);
-
-      return matchesType && matchesSearch;
+      return matchesType && (!query || searchable.includes(query));
     });
   }, [nodes, nodeType, searchQuery]);
 
-  // --------------------------------------------------
-  // Visible edges
-  // --------------------------------------------------
-
   const visibleEdges = useMemo(() => {
-    const visibleIds = new Set(
-      filteredNodes.map((node) =>
-        String(node.id)
-      )
-    );
+    const visibleIds = new Set(filteredNodes.map((node) => String(node.id)));
 
     return edges.filter(
       (edge) =>
@@ -459,144 +436,17 @@ function KnowledgeGraph() {
     );
   }, [edges, filteredNodes]);
 
-  // --------------------------------------------------
-  // Generate graph
-  // --------------------------------------------------
-
-  const generateGraph = async () => {
-    if (notebookId && !notebookLoaded) {
-      setError(
-        "Please wait while the research notebook loads."
-      );
-      return;
-    }
-
-        if (!notebookId || !notebookLoaded || !notebook) {
-      setError(
-        "Load a valid research notebook before generating its knowledge graph."
-      );
-      return;
-    }
-
-    if (selectedResourceIds.length === 0) {
-      setError(
-        "Add at least one research paper to this notebook before generating a knowledge graph."
-      );
-      return;
-    }
-
-    if (missingSourceCount > 0) {
-      setError(
-        `${missingSourceCount} saved notebook source(s) could not be matched to available paper records. Check the notebook sources before generating the graph.`
-      );
-      return;
-    }
-
-    try {
-      setGenerating(true);
-      setError("");
-      setSelectedNode(null);
-      setZoom(1);
-
-      const response = await fetch(
-        `${API_URL}/api/knowledge-graph`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...getAuthHeaders(),
-          },
-          body: JSON.stringify({
-            resource_ids: selectedResourceIds,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const message = await response.text();
-
-        throw new Error(
-          message ||
-            "Knowledge graph generation failed."
-        );
-      }
-
-      const data = await response.json();
-
-      setNodes(
-        Array.isArray(data.nodes)
-          ? data.nodes
-          : []
-      );
-
-      setEdges(
-        Array.isArray(data.edges)
-          ? data.edges
-          : []
-      );
-    } catch (err) {
-      console.error(err);
-
-      setError(
-        err.message ||
-          "Knowledge graph generation failed."
-      );
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  // --------------------------------------------------
-  // Zoom
-  // --------------------------------------------------
-
-  const zoomIn = () => {
-    setZoom((current) =>
-      Math.min(
-        1.8,
-        Number((current + 0.15).toFixed(2))
-      )
-    );
-  };
-
-  const zoomOut = () => {
-    setZoom((current) =>
-      Math.max(
-        0.65,
-        Number((current - 0.15).toFixed(2))
-      )
-    );
-  };
-
-  const resetZoom = () => {
-    setZoom(1);
-  };
-
-  // --------------------------------------------------
-  // Selection neighborhood
-  // --------------------------------------------------
-
   const selectedNeighborhood = useMemo(() => {
-    if (!selectedNode) {
-      return null;
-    }
+    if (!selectedNode) return null;
 
-    const connected = new Set([
-      String(selectedNode.id),
-    ]);
+    const connected = new Set([String(selectedNode.id)]);
 
     edges.forEach((edge) => {
-      if (
-        String(edge.source) ===
-        String(selectedNode.id)
-      ) {
+      if (String(edge.source) === String(selectedNode.id)) {
         connected.add(String(edge.target));
       }
 
-      if (
-        String(edge.target) ===
-        String(selectedNode.id)
-      ) {
+      if (String(edge.target) === String(selectedNode.id)) {
         connected.add(String(edge.source));
       }
     });
@@ -604,17 +454,120 @@ function KnowledgeGraph() {
     return connected;
   }, [selectedNode, edges]);
 
+  const generateGraph = async () => {
+    if (!notebookId || !notebookLoaded || !notebook) {
+      setError("Select a valid research notebook before generating its graph.");
+      return;
+    }
+
+    if (selectedResourceIds.length === 0) {
+      setError("Add at least one research paper to this notebook first.");
+      return;
+    }
+
+    if (missingSourceCount > 0) {
+      setError(
+        `${missingSourceCount} notebook source(s) could not be matched to available paper records. Resolve these sources before generating the graph.`
+      );
+      return;
+    }
+
+    setGenerating(true);
+    setError("");
+    setNotice("");
+    setSelectedNode(null);
+
+    try {
+      const data = await apiRequest("/api/knowledge-graph", {
+        method: "POST",
+        body: JSON.stringify({ resource_ids: selectedResourceIds }),
+      });
+
+      const newNodes = Array.isArray(data?.nodes) ? data.nodes : [];
+      const newEdges = Array.isArray(data?.edges) ? data.edges : [];
+
+      setNodes(newNodes);
+      setEdges(newEdges);
+      setSavedGraph(false);
+      setSavedGraphId("");
+      setZoom(1);
+
+      if (newNodes.length === 0) {
+        setNotice(
+          "Graph generation completed, but no entities were returned. Check the paper text and backend extraction logs."
+        );
+      } else {
+        setNotice(
+          `Graph generated: ${newNodes.length} entities and ${newEdges.length} relationships. Save it to reopen this snapshot later.`
+        );
+      }
+    } catch (err) {
+      setError(err.message || "Knowledge graph generation failed.");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const saveGraph = async () => {
+    if (!notebookId || !notebook) {
+      setError("Select a notebook before saving the graph.");
+      return;
+    }
+
+    if (nodes.length === 0) {
+      setError("There are no graph entities to save.");
+      return;
+    }
+
+    setSavingGraph(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const data = await apiRequest("/api/knowledge-graph/saved", {
+        method: "POST",
+        body: JSON.stringify({
+          notebook_id: notebookId,
+          nodes,
+          edges,
+        }),
+      });
+
+      const graph = data?.graph || data || {};
+      const graphId = String(graph.graph_id || graph.id || savedGraphId || "");
+
+      setSavedGraph(true);
+      setSavedGraphId(graphId);
+      setNotice("Knowledge graph snapshot saved for this notebook.");
+    } catch (err) {
+      setError(
+        `Could not save the graph. ${err.message} Ensure the backend save endpoints are implemented.`
+      );
+    } finally {
+      setSavingGraph(false);
+    }
+  };
+
+  const clearGraphSelection = () => setSelectedNode(null);
+
+  const zoomIn = () =>
+    setZoom((current) => Math.min(1.8, Number((current + 0.15).toFixed(2))));
+
+  const zoomOut = () =>
+    setZoom((current) => Math.max(0.65, Number((current - 0.15).toFixed(2))));
+
+  const resetZoom = () => setZoom(1);
+
   return (
     <AppLayout>
-      <div className="min-h-[calc(100vh-6rem)]">
-        {/* HEADER */}
-
+      <div className="min-h-[calc(100vh-6rem)] text-slate-800">
+        {/* Header */}
         <div className="flex flex-col gap-5 border-b border-white/[0.06] pb-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-start gap-3">
             <button
               type="button"
               onClick={backToNotebook}
-              className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-slate-900/60 text-slate-500 transition hover:bg-white/[0.04] hover:text-slate-200"
+              className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-slate-900/60 text-slate-400 transition hover:bg-white/[0.06] hover:text-white"
               aria-label="Back to research notebook"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -623,7 +576,6 @@ function KnowledgeGraph() {
             <div>
               <div className="flex items-center gap-2">
                 <Network className="h-4 w-4 text-cyan-400" />
-
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-400">
                   Research Intelligence
                 </p>
@@ -633,104 +585,136 @@ function KnowledgeGraph() {
                 Knowledge Graph
               </h1>
 
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-                Explore evidence-grounded entities and
-                relationships discovered across your
-                selected research sources.
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
+                Explore evidence-grounded entities and relationships across
+                your research sources.
               </p>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={generateGraph}
-            disabled={
-              generating ||
-              loadingPapers ||
-              !notebookLoaded ||
-              (Boolean(notebookId) && !notebook) ||
-              selectedResourceIds.length === 0
-            }
-            className="flex shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-500 px-4 py-2.5 text-xs font-medium text-white shadow-lg shadow-indigo-500/20 transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {generating ? (
-              <>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={saveGraph}
+              disabled={!notebook || nodes.length === 0 || savingGraph || generating}
+              className="flex items-center justify-center gap-2 rounded-xl border border-white/[0.12] bg-slate-900 px-4 py-2.5 text-xs font-medium text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {savingGraph ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Building graph...
-              </>
-            ) : (
-              <>
-                <Network className="h-4 w-4" />
-                Generate Graph
-              </>
-            )}
-          </button>
-        </div>
-
-        {/* ACTIVE CONTEXT */}
-
-        <div className="mt-5 rounded-2xl border border-white/[0.06] bg-slate-950/40">
-          <div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-indigo-400/10 bg-indigo-500/[0.06]">
-                <BookOpen className="h-4 w-4 text-indigo-400" />
-              </div>
-
-              <div>
-                <p className="text-xs font-medium text-slate-300">
-                  {notebookId
-                    ? notebook?.title || "Research Notebook"
-                    : "Active Research Context"}
-                </p>
-
-                <p className="mt-1 text-[10px] text-slate-600">
-  {!notebookLoaded
-    ? "Loading notebook sources..."
-    : notebook
-      ? `${selectedResourceIds.length} selected ${
-          selectedResourceIds.length === 1
-            ? "source"
-            : "sources"
-        }`
-      : "No notebook loaded"}
-</p>
-{notebookLoaded &&
-  notebook &&
-  missingSourceCount > 0 &&
-  !loadingPapers && (
-    <div className="border-t border-white/[0.06] px-5 py-3">
-      <p className="text-xs leading-5 text-amber-300/80">
-        {missingSourceCount} saved source
-        {missingSourceCount === 1 ? " is" : "s are"} not
-        available in the paper records. Resolve the missing
-        sources before generating the graph.
-      </p>
-    </div>
-  )}
-              </div>
-            </div>
+              ) : savedGraph ? (
+                <Check className="h-4 w-4 text-emerald-400" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              {savingGraph ? "Saving..." : savedGraph ? "Save again" : "Save graph"}
+            </button>
 
             <button
               type="button"
-              onClick={backToNotebook}
-              className="flex items-center gap-1.5 text-[10px] text-indigo-400 transition hover:text-indigo-300"
+              onClick={generateGraph}
+              disabled={
+                generating ||
+                loadingPapers ||
+                !notebookLoaded ||
+                !notebook ||
+                selectedResourceIds.length === 0 ||
+                missingSourceCount > 0
+              }
+              className="flex items-center justify-center gap-2 rounded-xl bg-indigo-500 px-4 py-2.5 text-xs font-medium text-white shadow-lg shadow-indigo-500/20 transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              Change sources
-              <ChevronRight className="h-3 w-3" />
+              {generating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Building graph...
+                </>
+              ) : (
+                <>
+                  <Network className="h-4 w-4" />
+                  Generate graph
+                </>
+              )}
             </button>
           </div>
+        </div>
 
-          {selectedPapers.length > 0 && (
-            <div className="border-t border-white/[0.06] px-5 py-3">
+        {/* Notebook selection and active context */}
+        <section className="mt-5 rounded-2xl border border-white/[0.08] bg-slate-950/40">
+          <div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-indigo-400/10 bg-indigo-500/[0.08]">
+                <BookOpen className="h-4 w-4 text-indigo-400" />
+              </div>
+
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-slate-200">
+                  {notebook?.title || "Choose a research notebook"}
+                </p>
+                <p className="mt-1 text-[10px] text-slate-500">
+                  {!notebookId
+                    ? "Select a notebook to load its sources and saved graph."
+                    : !notebookLoaded
+                      ? "Loading notebook..."
+                      : notebook
+                        ? `${selectedResourceIds.length} selected source${selectedResourceIds.length === 1 ? "" : "s"}`
+                        : "The selected notebook could not be loaded."}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="min-w-[230px]">
+                <label
+                  htmlFor="kg-notebook-select"
+                  className="mb-1.5 block text-[9px] uppercase tracking-wider text-slate-500"
+                >
+                  Research notebook
+                </label>
+
+                <select
+                  id="kg-notebook-select"
+                  value={notebookId}
+                  onChange={(event) => handleNotebookChange(event.target.value)}
+                  disabled={loadingNotebooks || generating || savingGraph}
+                  className="w-full rounded-lg border border-white/[0.12] bg-slate-900 px-3 py-2.5 text-xs text-slate-200 outline-none focus:border-indigo-400/60"
+                >
+                  <option value="">
+                    {loadingNotebooks ? "Loading notebooks..." : "Select a notebook"}
+                  </option>
+
+                  {availableNotebooks.map((item) => {
+                    const id = getNotebookId(item);
+
+                    return (
+                      <option key={id} value={id}>
+                        {item.title || item.name || "Untitled Notebook"}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              <button
+                type="button"
+                onClick={backToNotebook}
+                disabled={!notebookId}
+                className="flex items-center gap-1.5 rounded-lg border border-white/[0.10] px-3 py-2.5 text-[10px] text-slate-300 transition hover:bg-white/[0.05] disabled:opacity-40"
+              >
+                Open notebook
+                <ChevronRight className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
+
+          {notebook && selectedPapers.length > 0 && (
+            <div className="border-t border-white/[0.07] px-5 py-3">
               <div className="flex flex-wrap gap-2">
                 {selectedPapers.map((paper) => (
                   <div
                     key={paper.id}
-                    className="flex max-w-xs items-center gap-2 rounded-lg border border-white/[0.05] bg-slate-900/50 px-2.5 py-1.5"
+                    className="flex max-w-xs items-center gap-2 rounded-lg border border-white/[0.07] bg-slate-900/60 px-2.5 py-1.5"
                   >
                     <FileText className="h-3 w-3 shrink-0 text-indigo-400" />
-
-                    <span className="truncate text-[10px] text-slate-500">
+                    <span className="truncate text-[10px] text-slate-400">
                       {paper.title}
                     </span>
                   </div>
@@ -739,33 +723,24 @@ function KnowledgeGraph() {
             </div>
           )}
 
-          {notebookLoaded &&
-            notebookId &&
-            notebook &&
-            selectedResourceIds.length > 0 &&
-            selectedPapers.length === 0 &&
-            !loadingPapers && (
-              <div className="border-t border-white/[0.06] px-5 py-3">
-                <p className="text-xs leading-5 text-amber-300/80">
-                  This notebook has saved source IDs, but
-                  matching paper metadata could not be
-                  found. Check that the sources still
-                  exist and are available to your account.
-                </p>
-              </div>
-            )}
-        </div>
+          {notebook && missingSourceCount > 0 && !loadingPapers && (
+            <div className="border-t border-amber-400/10 px-5 py-3">
+              <p className="text-xs leading-5 text-amber-300">
+                {missingSourceCount} saved source(s) could not be matched to
+                available paper records. Resolve these before generating.
+              </p>
+            </div>
+          )}
+        </section>
 
-        {/* ERROR */}
-
+        {/* Feedback */}
         {error && (
-          <div className="mt-5 flex items-start justify-between gap-4 rounded-xl border border-red-400/10 bg-red-500/[0.04] px-4 py-3 text-xs text-red-300">
+          <div className="mt-5 flex items-start justify-between gap-4 rounded-xl border border-red-400/20 bg-red-500/[0.06] px-4 py-3 text-xs text-red-200">
             <span>{error}</span>
-
             <button
               type="button"
               onClick={() => setError("")}
-              className="shrink-0 text-red-400/70 hover:text-red-300"
+              className="shrink-0 text-red-300 hover:text-white"
               aria-label="Dismiss error"
             >
               <X className="h-4 w-4" />
@@ -773,37 +748,47 @@ function KnowledgeGraph() {
           </div>
         )}
 
-        {/* GRAPH WORKSPACE */}
+        {notice && (
+          <div className="mt-5 flex items-start justify-between gap-4 rounded-xl border border-emerald-400/20 bg-emerald-500/[0.06] px-4 py-3 text-xs text-emerald-200">
+            <span>{notice}</span>
+            <button
+              type="button"
+              onClick={() => setNotice("")}
+              className="shrink-0 text-emerald-300 hover:text-white"
+              aria-label="Dismiss message"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
 
+        {/* Graph workspace */}
         <div className="mt-5 grid min-h-[620px] gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
-          {/* GRAPH CANVAS */}
-
-          <section className="relative min-h-[620px] overflow-hidden rounded-2xl border border-white/[0.07] bg-slate-950/50">
-            {/* Top toolbar */}
-
+          <section
+            data-kg-workspace
+            className="relative min-h-[620px] overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-sm"
+          >
+            {/* Canvas toolbar */}
             <div className="absolute left-4 right-4 top-4 z-30 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 rounded-xl border border-white/[0.07] bg-slate-900/90 p-1.5 shadow-xl backdrop-blur">
+              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white/95 p-1.5 shadow-sm backdrop-blur">
                 <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-600" />
-
+                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
                   <input
                     value={searchQuery}
-                    onChange={(event) =>
-                      setSearchQuery(event.target.value)
-                    }
+                    onChange={(event) => setSearchQuery(event.target.value)}
                     placeholder="Search entities..."
-                    className="h-8 w-52 bg-transparent pl-8 pr-3 text-xs text-slate-300 outline-none placeholder:text-slate-600"
+                    className="h-8 w-36 bg-transparent pl-8 pr-3 text-xs text-slate-700 outline-none placeholder:text-slate-400 sm:w-52"
                     aria-label="Search graph entities"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center gap-1 rounded-xl border border-white/[0.07] bg-slate-900/90 p-1 shadow-xl backdrop-blur">
+              <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white/95 p-1 shadow-sm backdrop-blur">
                 <button
                   type="button"
                   onClick={zoomOut}
                   disabled={zoom <= 0.65}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white/[0.04] hover:text-slate-300 disabled:opacity-30"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-100 disabled:opacity-30"
                   title="Zoom out"
                 >
                   <ZoomOut className="h-3.5 w-3.5" />
@@ -812,7 +797,7 @@ function KnowledgeGraph() {
                 <button
                   type="button"
                   onClick={resetZoom}
-                  className="flex h-8 min-w-10 items-center justify-center rounded-lg px-2 text-[9px] text-slate-500 transition hover:bg-white/[0.04] hover:text-slate-300"
+                  className="flex h-8 min-w-10 items-center justify-center rounded-lg px-2 text-[9px] text-slate-600 transition hover:bg-slate-100"
                   title="Reset zoom"
                 >
                   {Math.round(zoom * 100)}%
@@ -822,45 +807,39 @@ function KnowledgeGraph() {
                   type="button"
                   onClick={zoomIn}
                   disabled={zoom >= 1.8}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white/[0.04] hover:text-slate-300 disabled:opacity-30"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-100 disabled:opacity-30"
                   title="Zoom in"
                 >
                   <ZoomIn className="h-3.5 w-3.5" />
                 </button>
 
-                <div className="mx-1 h-4 w-px bg-white/[0.06]" />
+                <div className="mx-1 h-4 w-px bg-slate-200" />
 
                 <button
                   type="button"
                   onClick={generateGraph}
                   disabled={
                     generating ||
-                    loadingPapers ||
-                    !notebookLoaded ||
-                    !notebookId ||
                     !notebook ||
+                    !notebookLoaded ||
                     selectedResourceIds.length === 0 ||
                     missingSourceCount > 0
                   }
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white/[0.04] hover:text-indigo-400 disabled:opacity-40"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-100 hover:text-indigo-600 disabled:opacity-40"
                   title="Regenerate graph"
                   aria-label="Regenerate graph"
                 >
-                  <RefreshCw
-                    className={`h-3.5 w-3.5 ${
-                      generating ? "animate-spin" : ""
-                    }`}
-                  />
+                  <RefreshCw className={`h-3.5 w-3.5 ${generating ? "animate-spin" : ""}`} />
                 </button>
 
                 <button
                   type="button"
-                  onClick={() =>
+                  onClick={() => {
                     document
-                      .querySelector("[data-kg-canvas]")
-                      ?.requestFullscreen?.()
-                  }
-                  className="hidden h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white/[0.04] hover:text-slate-300 sm:flex"
+                      .querySelector("[data-kg-workspace]")
+                      ?.requestFullscreen?.();
+                  }}
+                  className="hidden h-8 w-8 items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-100 sm:flex"
                   title="Fullscreen graph"
                   aria-label="Fullscreen graph"
                 >
@@ -869,14 +848,22 @@ function KnowledgeGraph() {
               </div>
             </div>
 
-            {/* Legend */}
-
             {nodes.length > 0 && <GraphLegend />}
 
-            {/* Type filter */}
+            {selectedNode && (
+              <button
+                type="button"
+                onClick={clearGraphSelection}
+                className="absolute right-4 top-[4.6rem] z-30 flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-medium text-slate-700 shadow-sm transition hover:bg-slate-100"
+              >
+                <RotateCcw className="h-3 w-3" />
+                Clear selection
+              </button>
+            )}
 
+            {/* Node type filters */}
             <div className="absolute bottom-4 left-4 right-4 z-30">
-              <div className="flex max-w-full gap-1 overflow-x-auto rounded-xl border border-white/[0.07] bg-slate-900/90 p-1.5 shadow-xl backdrop-blur">
+              <div className="flex max-w-full gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white/95 p-1.5 shadow-sm backdrop-blur">
                 {NODE_TYPES.map((type) => (
                   <button
                     key={type}
@@ -884,8 +871,8 @@ function KnowledgeGraph() {
                     onClick={() => setNodeType(type)}
                     className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[9px] font-medium capitalize transition ${
                       nodeType === type
-                        ? "bg-indigo-500/15 text-indigo-300"
-                        : "text-slate-600 hover:bg-white/[0.03] hover:text-slate-400"
+                        ? "bg-indigo-100 text-indigo-800"
+                        : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
                     }`}
                   >
                     {formatNodeType(type)}
@@ -894,16 +881,23 @@ function KnowledgeGraph() {
               </div>
             </div>
 
-            {/* Graph */}
-
-            {generating || !notebookLoaded ? (
-              <GraphLoading />
-            ) : loadingPapers ? (
-              <GraphLoading />
+            {!notebookId ? (
+              <GraphPrompt
+                title="Select a research notebook"
+                description="Choose a notebook above to load its research sources and any saved knowledge graph."
+              />
+            ) : !notebookLoaded || generating || loadingPapers ? (
+              <GraphLoading generating={generating} />
+            ) : !notebook ? (
+              <GraphPrompt
+                title="Notebook unavailable"
+                description="Choose another notebook from the selector above, or return to your notebook list."
+              />
             ) : filteredNodes.length === 0 ? (
               <GraphEmpty
                 hasSources={selectedResourceIds.length > 0}
                 hasGraph={nodes.length > 0}
+                hasSearch={Boolean(searchQuery.trim()) || nodeType !== "all"}
                 onGenerate={generateGraph}
               />
             ) : (
@@ -913,37 +907,35 @@ function KnowledgeGraph() {
                 selectedNode={selectedNode}
                 selectedNeighborhood={selectedNeighborhood}
                 onSelect={setSelectedNode}
+                onClearSelection={clearGraphSelection}
                 zoom={zoom}
               />
             )}
           </section>
 
-          {/* ENTITY DETAILS */}
-
-          <aside className="min-h-[620px] overflow-hidden rounded-2xl border border-white/[0.07] bg-slate-950/40">
-            <div className="border-b border-white/[0.06] p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-400">
-                    Entity Details
-                  </p>
-
-                  <p className="mt-1 text-xs text-slate-600">
-                    Select an entity from the graph.
-                  </p>
-                </div>
-
-                {selectedNode && (
-                  <button
-                    type="button"
-                    onClick={() => setSelectedNode(null)}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-600 transition hover:bg-white/[0.04] hover:text-slate-300"
-                    aria-label="Clear selected entity"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
+          {/* Details panel */}
+          <aside className="min-h-[620px] overflow-hidden rounded-2xl border border-white/[0.08] bg-slate-950/40">
+            <div className="flex items-center justify-between border-b border-white/[0.08] p-5">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-400">
+                  Entity Details
+                </p>
+                <p className="mt-1 text-xs text-slate-400">
+                  Inspect relationships and supporting evidence.
+                </p>
               </div>
+
+              {selectedNode && (
+                <button
+                  type="button"
+                  onClick={clearGraphSelection}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-white/[0.06] hover:text-white"
+                  aria-label="Clear selected entity"
+                  title="Clear selection"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
 
             {selectedNode ? (
@@ -952,34 +944,31 @@ function KnowledgeGraph() {
                 edges={edges}
                 nodes={nodes}
                 papers={papers}
+                onSelectNode={setSelectedNode}
               />
             ) : (
               <div className="flex h-[500px] flex-col items-center justify-center px-6 text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/[0.06] bg-slate-900/50">
-                  <Network className="h-5 w-5 text-slate-700" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/[0.08] bg-slate-900/70">
+                  <Network className="h-5 w-5 text-slate-500" />
                 </div>
-
-                <p className="mt-4 text-xs font-medium text-slate-500">
+                <p className="mt-4 text-xs font-medium text-slate-300">
                   No entity selected
                 </p>
-
-                <p className="mt-2 text-[10px] leading-4 text-slate-700">
-                  Select a node to inspect its relationships,
-                  evidence, and source papers.
+                <p className="mt-2 text-[10px] leading-5 text-slate-500">
+                  Select a node to inspect its relationships, evidence, and
+                  source papers. Use Clear selection to return to the full graph.
                 </p>
               </div>
             )}
           </aside>
         </div>
 
-        {/* GRAPH STATISTICS */}
-
+        {/* Graph statistics */}
         {nodes.length > 0 && (
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <Stat label="Nodes" value={nodes.length} />
             <Stat label="Relationships" value={edges.length} />
-            <Stat label="Visible" value={filteredNodes.length} />
-
+            <Stat label="Visible nodes" value={filteredNodes.length} />
             <Stat
               label="Sources"
               value={
@@ -992,10 +981,12 @@ function KnowledgeGraph() {
                 ).size
               }
             />
-
+            {savedGraph && (
+              <Stat label="Snapshot" value="Saved" />
+            )}
             {searchQuery && (
-              <span className="text-[10px] text-slate-700">
-                Filtered by "{searchQuery}"
+              <span className="text-[10px] text-slate-400">
+                Search: "{searchQuery}"
               </span>
             )}
           </div>
@@ -1005,10 +996,6 @@ function KnowledgeGraph() {
   );
 }
 
-// ======================================================
-// Graph Legend
-// ======================================================
-
 function GraphLegend() {
   const visibleTypes = [
     "paper",
@@ -1017,37 +1004,30 @@ function GraphLegend() {
     "dataset",
     "metric",
     "concept",
+    "finding",
+    "limitation",
+    "future_work",
   ];
 
   return (
-    <div className="absolute left-4 top-[4.7rem] z-20 hidden max-w-[390px] rounded-xl border border-white/[0.06] bg-slate-950/75 px-3 py-2.5 backdrop-blur md:block">
+    <div className="absolute left-4 top-[4.7rem] z-20 hidden max-w-[440px] rounded-xl border border-slate-200 bg-white/95 px-3 py-2.5 shadow-sm backdrop-blur md:block">
       <div className="flex flex-wrap gap-x-3 gap-y-2">
-        {visibleTypes.map((type) => {
-          const style = NODE_STYLES[type];
-
-          return (
-            <div
-              key={type}
-              className="flex items-center gap-1.5"
-            >
-              <span
-                className={`h-2 w-2 rounded-full ${style.dot}`}
-              />
-
-              <span className="text-[8px] text-slate-600">
-                {formatNodeType(type)}
-              </span>
-            </div>
-          );
-        })}
+        {visibleTypes.map((type) => (
+          <div key={type} className="flex items-center gap-1.5">
+            <span
+              className="h-2 w-2 rounded-full"
+              style={{ backgroundColor: NODE_STYLES[type].hex }}
+            />
+            <span className="text-[8px] text-slate-600">
+              {formatNodeType(type)}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-// ======================================================
-// Graph Canvas
-// ======================================================
 
 function GraphCanvas({
   nodes,
@@ -1055,6 +1035,7 @@ function GraphCanvas({
   selectedNode,
   selectedNeighborhood,
   onSelect,
+  onClearSelection,
   zoom,
 }) {
   const width = 1200;
@@ -1063,6 +1044,7 @@ function GraphCanvas({
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const dragStart = useRef(null);
+  const hasDragged = useRef(false);
 
   const positionedNodes = useMemo(
     () => calculateGraphLayout(nodes, edges, width, height),
@@ -1072,20 +1054,26 @@ function GraphCanvas({
   const nodeMap = useMemo(
     () =>
       Object.fromEntries(
-        positionedNodes.map((node) => [
-          String(node.id),
-          node,
-        ])
+        positionedNodes.map((node) => [String(node.id), node])
       ),
     [positionedNodes]
   );
 
-  const handlePointerDown = (event) => {
-    if (event.target.closest("[data-graph-node]")) {
-      return;
-    }
+  useEffect(() => {
+    setPan({ x: 0, y: 0 });
+    setDragging(false);
+    dragStart.current = null;
+    hasDragged.current = false;
+  }, [nodes, edges]);
 
-    setDragging(true);
+  const handlePointerDown = (event) => {
+    // Selecting a node should never initiate canvas panning.
+    if (event.target.closest("[data-graph-node]")) return;
+
+    // Only start a pan with the primary mouse button.
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+
+    hasDragged.current = false;
 
     dragStart.current = {
       clientX: event.clientX,
@@ -1094,27 +1082,48 @@ function GraphCanvas({
       panY: pan.y,
     };
 
-    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setDragging(true);
+
+    try {
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    } catch {
+      // Pointer capture is optional; ordinary pointer events still work.
+    }
   };
 
   const handlePointerMove = (event) => {
-    if (!dragging || !dragStart.current) {
-      return;
+    if (!dragging || !dragStart.current) return;
+
+    const deltaX = event.clientX - dragStart.current.clientX;
+    const deltaY = event.clientY - dragStart.current.clientY;
+
+    // Distinguish an actual pan from a normal click on empty canvas.
+    if (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4) {
+      hasDragged.current = true;
     }
 
     setPan({
-      x:
-        dragStart.current.panX +
-        (event.clientX - dragStart.current.clientX),
-      y:
-        dragStart.current.panY +
-        (event.clientY - dragStart.current.clientY),
+      x: dragStart.current.panX + deltaX,
+      y: dragStart.current.panY + deltaY,
     });
   };
 
   const stopDragging = () => {
     setDragging(false);
     dragStart.current = null;
+  };
+
+  const handleCanvasClick = (event) => {
+    // Node clicks are handled by the node itself.
+    if (event.target.closest("[data-graph-node]")) return;
+
+    // A pan should not be interpreted as a request to deselect.
+    if (hasDragged.current) {
+      hasDragged.current = false;
+      return;
+    }
+
+    onClearSelection();
   };
 
   return (
@@ -1128,19 +1137,15 @@ function GraphCanvas({
       onPointerUp={stopDragging}
       onPointerCancel={stopDragging}
       onLostPointerCapture={stopDragging}
-      onPointerLeave={stopDragging}
+      onClick={handleCanvasClick}
     >
       <svg
         viewBox={`0 0 ${width} ${height}`}
         className="h-full w-full select-none"
         style={{
-          transform: `translate(${pan.x / 2}px, ${
-            pan.y / 2
-          }px) scale(${zoom})`,
+          transform: `translate(${pan.x / 2}px, ${pan.y / 2}px) scale(${zoom})`,
           transformOrigin: "center",
-          transition: dragging
-            ? "none"
-            : "transform 180ms ease",
+          transition: dragging ? "none" : "transform 180ms ease",
         }}
       >
         <defs>
@@ -1153,8 +1158,7 @@ function GraphCanvas({
             <path
               d="M 32 0 L 0 0 0 32"
               fill="none"
-              stroke="currentColor"
-              strokeOpacity="0.035"
+              stroke="#cbd5e1"
               strokeWidth="1"
             />
           </pattern>
@@ -1168,109 +1172,96 @@ function GraphCanvas({
             orient="auto"
             markerUnits="userSpaceOnUse"
           >
-            <path
-              d="M0,0 L8,4 L0,8 Z"
-              fill="#818cf8"
-              fillOpacity="0.55"
-            />
+            <path d="M0,0 L8,4 L0,8 Z" fill="#64748b" />
           </marker>
 
-          <filter
-            id="node-glow"
-            x="-100%"
-            y="-100%"
-            width="300%"
-            height="300%"
+          <marker
+            id="graph-arrow-highlight"
+            markerWidth="9"
+            markerHeight="9"
+            refX="8"
+            refY="4.5"
+            orient="auto"
+            markerUnits="userSpaceOnUse"
           >
-            <feGaussianBlur
-              stdDeviation="4"
-              result="blur"
-            />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#4f46e5" />
+          </marker>
         </defs>
 
+        <rect width="100%" height="100%" fill="#f8fafc" />
         <rect
           width="100%"
           height="100%"
           fill="url(#graph-grid)"
-          className="text-white"
+          opacity="0.65"
         />
 
-        {/* Edges */}
-
+        {/* Relationship edges */}
         {edges.map((edge, index) => {
           const source = nodeMap[String(edge.source)];
           const target = nodeMap[String(edge.target)];
 
-          if (!source || !target) {
-            return null;
-          }
+          if (!source || !target) return null;
 
-          const edgeConnected =
-            selectedNode &&
-            (
-              String(edge.source) === String(selectedNode.id) ||
-              String(edge.target) === String(selectedNode.id)
-            );
+          const isConnected =
+            Boolean(selectedNode) &&
+            (String(edge.source) === String(selectedNode.id) ||
+              String(edge.target) === String(selectedNode.id));
 
-          const edgeOpacity = selectedNode
-            ? edgeConnected
-              ? 0.78
-              : 0.08
-            : 0.34;
+          const isFocused = !selectedNode || isConnected;
 
-          const path = buildCurvedEdgePath(source, target);
           const midpoint = getEdgeMidpoint(source, target);
+          const path = buildCurvedEdgePath(source, target);
+          const label = formatRelationship(edge.relationship);
+          const labelWidth = Math.min(
+            150,
+            Math.max(74, label.length * 5.8 + 16)
+          );
 
           return (
             <g
               key={`${edge.source}-${edge.target}-${edge.relationship}-${index}`}
-              pointerEvents="none"
+              opacity={isFocused ? 1 : 0.18}
             >
               <path
                 d={path}
                 fill="none"
-                stroke="#818cf8"
-                strokeOpacity={edgeOpacity}
-                strokeWidth={edgeConnected ? 2 : 1.25}
-                markerEnd="url(#graph-arrow)"
-                className="transition-all duration-200"
+                stroke={isConnected ? "#4f46e5" : "#64748b"}
+                strokeOpacity={
+                  !selectedNode ? 0.72 : isConnected ? 1 : 0.35
+                }
+                strokeWidth={isConnected ? 2.8 : 1.5}
+                markerEnd={
+                  isConnected
+                    ? "url(#graph-arrow-highlight)"
+                    : "url(#graph-arrow)"
+                }
+                strokeLinecap="round"
               />
 
               {edge.relationship && (
-                <g
-                  opacity={
-                    selectedNode
-                      ? edgeConnected
-                        ? 1
-                        : 0.15
-                      : 0.85
-                  }
-                >
+                <g opacity={!selectedNode ? 1 : isConnected ? 1 : 0.3}>
                   <rect
-                    x={midpoint.x - 48}
+                    x={midpoint.x - labelWidth / 2}
                     y={midpoint.y - 10}
-                    width="96"
+                    width={labelWidth}
                     height="20"
                     rx="6"
-                    fill="#020617"
-                    fillOpacity="0.88"
-                    stroke="#ffffff"
-                    strokeOpacity="0.05"
+                    fill={isConnected ? "#eef2ff" : "#ffffff"}
+                    fillOpacity="0.98"
+                    stroke={isConnected ? "#a5b4fc" : "#cbd5e1"}
+                    strokeWidth={isConnected ? 1.2 : 0.8}
                   />
 
                   <text
                     x={midpoint.x}
                     y={midpoint.y + 3}
                     textAnchor="middle"
-                    fill="#94a3b8"
-                    fontSize="8"
+                    fill={isConnected ? "#3730a3" : "#334155"}
+                    fontSize="8.5"
+                    fontWeight={isConnected ? 700 : 500}
                   >
-                    {formatRelationship(edge.relationship)}
+                    {truncate(label, 23)}
                   </text>
                 </g>
               )}
@@ -1278,21 +1269,21 @@ function GraphCanvas({
           );
         })}
 
-        {/* Nodes */}
-
+        {/* Entity nodes */}
         {positionedNodes.map((node) => {
-          const selected =
-            String(selectedNode?.id) === String(node.id);
+          const nodeId = String(node.id);
+          const selected = String(selectedNode?.id) === nodeId;
 
-          const highlighted =
-            !selectedNode ||
-            selected ||
-            selectedNeighborhood?.has(String(node.id));
+          const isNeighbor =
+            Boolean(selectedNode) &&
+            !selected &&
+            selectedNeighborhood?.has(nodeId);
 
-          const style =
-            NODE_STYLES[node.type] || NODE_STYLES.concept;
+          const isFocused = !selectedNode || selected || isNeighbor;
 
+          const style = NODE_STYLES[node.type] || NODE_STYLES.concept;
           const radius = getNodeRadius(node, edges);
+          const degree = getNodeDegree(node.id, edges);
 
           return (
             <g
@@ -1304,48 +1295,71 @@ function GraphCanvas({
                 onSelect(node);
               }}
               className="cursor-pointer"
-              opacity={highlighted ? 1 : 0.18}
+              opacity={isFocused ? 1 : 0.22}
+              style={{
+                transition: "opacity 160ms ease",
+              }}
             >
-              {node.type !== "paper" &&
-                getNodeDegree(node.id, edges) >= 2 && (
+              {/* Soft halo for entities connected to the selected node */}
+              {isNeighbor && (
+                <circle
+                  r={radius + 8}
+                  fill="#4f46e5"
+                  fillOpacity="0.08"
+                  stroke="#818cf8"
+                  strokeOpacity="0.9"
+                  strokeWidth="1.8"
+                />
+              )}
+
+              {/* Existing halo for well-connected entities */}
+              {!selected &&
+                !isNeighbor &&
+                node.type !== "paper" &&
+                degree >= 2 && (
                   <circle
-                    r={radius + 8}
+                    r={radius + 7}
                     fill={style.hex}
-                    fillOpacity="0.035"
+                    fillOpacity="0.07"
                     stroke={style.hex}
-                    strokeOpacity="0.12"
+                    strokeOpacity="0.25"
                     strokeWidth="1"
                   />
                 )}
 
+              {/* Strong selection ring */}
               {selected && (
-                <circle
-                  r={radius + 10}
-                  fill="none"
-                  stroke="#818cf8"
-                  strokeOpacity="0.45"
-                  strokeWidth="1"
-                  filter="url(#node-glow)"
-                />
+                <>
+                  <circle
+                    r={radius + 12}
+                    fill="#4f46e5"
+                    fillOpacity="0.08"
+                    stroke="#818cf8"
+                    strokeOpacity="0.4"
+                    strokeWidth="5"
+                  />
+
+                  <circle
+                    r={radius + 8}
+                    fill="none"
+                    stroke="#4f46e5"
+                    strokeWidth="2.5"
+                  />
+                </>
               )}
 
               <circle
                 r={radius}
-                fill="#020617"
-                fillOpacity={node.type === "paper" ? 0.95 : 0.88}
-                stroke={style.hex}
-                strokeOpacity={selected ? 1 : 0.65}
+                fill="#ffffff"
+                stroke={selected ? "#4f46e5" : style.hex}
+                strokeOpacity={isFocused ? 1 : 0.6}
                 strokeWidth={
-                  selected
-                    ? 2.4
-                    : node.type === "paper"
-                      ? 2
-                      : 1.4
+                  selected ? 3.5 : isNeighbor ? 2.8 : node.type === "paper" ? 2.5 : 1.8
                 }
               />
 
               <circle
-                r={radius - 2}
+                r={radius - 3}
                 fill={style.hex}
                 fillOpacity={node.type === "paper" ? 0.12 : 0.06}
               />
@@ -1353,40 +1367,44 @@ function GraphCanvas({
               <circle
                 r={node.type === "paper" ? 6 : 4.5}
                 fill={style.hex}
-                fillOpacity="0.9"
               />
 
-              {getNodeDegree(node.id, edges) > 1 && (
+              {degree > 1 && (
                 <text
                   x={radius - 2}
                   y={-radius + 4}
                   textAnchor="end"
-                  fill="#64748b"
+                  fill="#475569"
                   fontSize="7"
+                  fontWeight={selected || isNeighbor ? 700 : 400}
                 >
-                  {getNodeDegree(node.id, edges)}
+                  {degree}
                 </text>
               )}
 
+              {/* Entity name */}
               <text
                 y={radius + 18}
                 textAnchor="middle"
-                fill={selected ? "#e2e8f0" : "#cbd5e1"}
+                fill={selected ? "#020617" : "#1e293b"}
+                stroke="#f8fafc"
+                strokeWidth={selected || isNeighbor ? "3.5" : "3"}
+                paintOrder="stroke"
                 fontSize={node.type === "paper" ? 10 : 9}
-                fontWeight={node.type === "paper" ? 600 : 400}
+                fontWeight={
+                  selected || isNeighbor || node.type === "paper" ? 700 : 500
+                }
               >
-                {truncate(
-                  node.name,
-                  node.type === "paper" ? 30 : 25
-                )}
+                {truncate(node.name, node.type === "paper" ? 30 : 25)}
               </text>
 
+              {/* Entity type */}
               <text
                 y={radius + 31}
                 textAnchor="middle"
                 fill={style.hex}
-                fillOpacity="0.85"
-                fontSize="7"
+                fontSize="7.5"
+                fontWeight={selected || isNeighbor ? 700 : 600}
               >
                 {formatNodeType(node.type)}
               </text>
@@ -1395,61 +1413,56 @@ function GraphCanvas({
         })}
       </svg>
 
-      <div className="pointer-events-none absolute bottom-[4.7rem] left-5 rounded-lg border border-white/[0.05] bg-slate-950/70 px-2.5 py-1.5 backdrop-blur">
-        <p className="text-[9px] text-slate-700">
-          Drag to explore · Click an entity · Shared nodes connect research sources
+      {/* Canvas guidance */}
+      <div className="pointer-events-none absolute bottom-[4.7rem] left-5 rounded-lg border border-slate-200 bg-white/95 px-2.5 py-1.5 shadow-sm">
+        <p className="text-[9px] text-slate-600">
+          Drag to explore · Click an entity to focus · Click empty space to clear
         </p>
       </div>
+
+      {/* Focus status */}
+      {selectedNode && (
+        <div className="pointer-events-none absolute left-4 top-[7.8rem] z-20 max-w-[230px] rounded-xl border border-indigo-200 bg-white/95 px-3 py-2 shadow-sm backdrop-blur">
+          <p className="text-[8px] font-semibold uppercase tracking-[0.14em] text-indigo-600">
+            Focused entity
+          </p>
+
+          <p className="mt-1 truncate text-xs font-semibold text-slate-800">
+            {selectedNode.name}
+          </p>
+
+          <p className="mt-1 text-[9px] text-slate-500">
+            Direct connections highlighted
+          </p>
+        </div>
+      )}
     </div>
   );
 }
 
-// ======================================================
-// Graph Layout
-// ======================================================
-
 function calculateGraphLayout(nodes, edges, width, height) {
-  if (nodes.length === 0) {
-    return [];
-  }
+  if (!nodes.length) return [];
 
   if (nodes.length === 1) {
-    return [{
-      ...nodes[0],
-      x: width / 2,
-      y: height / 2,
-    }];
+    return [{ ...nodes[0], x: width / 2, y: height / 2 }];
   }
 
-  const degree = {};
-
-  nodes.forEach((node) => {
-    degree[String(node.id)] = 0;
-  });
+  const degree = Object.fromEntries(nodes.map((node) => [String(node.id), 0]));
 
   edges.forEach((edge) => {
-    if (degree[String(edge.source)] !== undefined) {
-      degree[String(edge.source)] += 1;
-    }
-
-    if (degree[String(edge.target)] !== undefined) {
-      degree[String(edge.target)] += 1;
-    }
+    if (degree[String(edge.source)] !== undefined) degree[String(edge.source)]++;
+    if (degree[String(edge.target)] !== undefined) degree[String(edge.target)]++;
   });
 
   const papers = nodes.filter((node) => node.type === "paper");
   const entities = nodes.filter((node) => node.type !== "paper");
   const positions = {};
 
-  const paperRadius = Math.min(
-    255,
-    150 + papers.length * 22
-  );
+  const paperRadius = Math.min(255, 150 + papers.length * 22);
 
   papers.forEach((paper, index) => {
     const angle =
-      (index / Math.max(papers.length, 1)) * Math.PI * 2 -
-      Math.PI / 2;
+      (index / Math.max(papers.length, 1)) * Math.PI * 2 - Math.PI / 2;
 
     positions[String(paper.id)] = {
       x: width / 2 + Math.cos(angle) * paperRadius,
@@ -1463,17 +1476,9 @@ function calculateGraphLayout(nodes, edges, width, height) {
   );
 
   entities.forEach((node, index) => {
-    const nodeDegree = degree[String(node.id)] || 0;
-    const connectivity = nodeDegree / maxDegree;
-
-    const radialDistance =
-      95 + (1 - connectivity) * 175;
-
-    const angle = stableAngle(
-      node.id,
-      index,
-      entities.length
-    );
+    const connectivity = (degree[String(node.id)] || 0) / maxDegree;
+    const radialDistance = 95 + (1 - connectivity) * 175;
+    const angle = stableAngle(node.id, index, entities.length);
 
     positions[String(node.id)] = {
       x: width / 2 + Math.cos(angle) * radialDistance,
@@ -1487,19 +1492,16 @@ function calculateGraphLayout(nodes, edges, width, height) {
     y: positions[String(node.id)]?.y ?? height / 2,
   }));
 
-  const iterations = nodes.length > 45 ? 24 : 36;
-
   const nodeIndex = new Map(
-    result.map((node, index) => [
-      String(node.id),
-      index,
-    ])
+    result.map((node, index) => [String(node.id), index])
   );
+
+  const iterations = nodes.length > 45 ? 24 : 36;
 
   for (let iteration = 0; iteration < iterations; iteration++) {
     const forces = result.map(() => ({ x: 0, y: 0 }));
 
-    // Repulsion
+    // Repulsion between nodes.
     for (let i = 0; i < result.length; i++) {
       for (let j = i + 1; j < result.length; j++) {
         const a = result[i];
@@ -1507,7 +1509,6 @@ function calculateGraphLayout(nodes, edges, width, height) {
 
         let dx = b.x - a.x;
         let dy = b.y - a.y;
-
         let distance = Math.sqrt(dx * dx + dy * dy);
 
         if (distance < 0.01) {
@@ -1517,71 +1518,49 @@ function calculateGraphLayout(nodes, edges, width, height) {
         }
 
         const minDistance =
-          a.type === "paper" || b.type === "paper"
-            ? 110
-            : 78;
+          a.type === "paper" || b.type === "paper" ? 110 : 78;
 
-        const strength =
-          Math.max(0, minDistance - distance) * 0.018;
-
+        const strength = Math.max(0, minDistance - distance) * 0.018;
         const nx = dx / distance;
         const ny = dy / distance;
 
         forces[i].x -= nx * strength;
         forces[i].y -= ny * strength;
-
         forces[j].x += nx * strength;
         forces[j].y += ny * strength;
       }
     }
 
-    // Edge attraction
+    // Attraction along relationships.
     edges.forEach((edge) => {
       const sourceIndex = nodeIndex.get(String(edge.source));
       const targetIndex = nodeIndex.get(String(edge.target));
 
-      if (
-        sourceIndex === undefined ||
-        targetIndex === undefined
-      ) {
-        return;
-      }
+      if (sourceIndex === undefined || targetIndex === undefined) return;
 
       const source = result[sourceIndex];
       const target = result[targetIndex];
 
       let dx = target.x - source.x;
       let dy = target.y - source.y;
-
-      const distance = Math.max(
-        1,
-        Math.sqrt(dx * dx + dy * dy)
-      );
+      const distance = Math.max(1, Math.sqrt(dx * dx + dy * dy));
 
       const desired =
-        source.type === "paper" || target.type === "paper"
-          ? 165
-          : 135;
+        source.type === "paper" || target.type === "paper" ? 165 : 135;
 
       const strength = (distance - desired) * 0.008;
-
       dx /= distance;
       dy /= distance;
 
       forces[sourceIndex].x += dx * strength;
       forces[sourceIndex].y += dy * strength;
-
       forces[targetIndex].x -= dx * strength;
       forces[targetIndex].y -= dy * strength;
     });
 
-    // Apply forces
     result.forEach((node, index) => {
-      const damping = 0.82;
-
-      node.x += forces[index].x * damping;
-      node.y += forces[index].y * damping;
-
+      node.x += forces[index].x * 0.82;
+      node.y += forces[index].y * 0.82;
       node.x = clamp(node.x, 65, width - 65);
       node.y = clamp(node.y, 75, height - 75);
     });
@@ -1590,14 +1569,9 @@ function calculateGraphLayout(nodes, edges, width, height) {
   return result;
 }
 
-// ======================================================
-// Edge Geometry
-// ======================================================
-
 function buildCurvedEdgePath(source, target) {
   const dx = target.x - source.x;
   const dy = target.y - source.y;
-
   const distance = Math.sqrt(dx * dx + dy * dy);
 
   if (distance < 1) {
@@ -1606,20 +1580,13 @@ function buildCurvedEdgePath(source, target) {
 
   const normalX = -dy / distance;
   const normalY = dx / distance;
-
   const curve = Math.min(45, distance * 0.12);
-
   const midpointX = (source.x + target.x) / 2;
   const midpointY = (source.y + target.y) / 2;
-
   const controlX = midpointX + normalX * curve;
   const controlY = midpointY + normalY * curve;
 
-  return `
-    M ${source.x} ${source.y}
-    Q ${controlX} ${controlY}
-      ${target.x} ${target.y}
-  `;
+  return `M ${source.x} ${source.y} Q ${controlX} ${controlY} ${target.x} ${target.y}`;
 }
 
 function getEdgeMidpoint(source, target) {
@@ -1629,11 +1596,7 @@ function getEdgeMidpoint(source, target) {
   };
 }
 
-// ======================================================
-// Entity Details
-// ======================================================
-
-function EntityDetails({ node, edges, nodes, papers }) {
+function EntityDetails({ node, edges, nodes, papers, onSelectNode }) {
   const related = edges
     .filter(
       (edge) =>
@@ -1641,16 +1604,9 @@ function EntityDetails({ node, edges, nodes, papers }) {
         String(edge.target) === String(node.id)
     )
     .map((edge) => {
-      const outgoing =
-        String(edge.source) === String(node.id);
-
-      const otherId = outgoing
-        ? edge.target
-        : edge.source;
-
-      const other = nodes.find(
-        (item) => String(item.id) === String(otherId)
-      );
+      const outgoing = String(edge.source) === String(node.id);
+      const otherId = outgoing ? edge.target : edge.source;
+      const other = nodes.find((item) => String(item.id) === String(otherId));
 
       return {
         ...edge,
@@ -1660,168 +1616,131 @@ function EntityDetails({ node, edges, nodes, papers }) {
     })
     .filter((item) => item.other);
 
-  const style =
-    NODE_STYLES[node.type] || NODE_STYLES.concept;
-
-  const sourceIds = Array.isArray(node.resource_ids)
-    ? node.resource_ids
-    : [];
-
-  const sourcePapers = sourceIds.map((resourceId) =>
-    papers.find(
-      (paper) => String(paper.id) === String(resourceId)
-    ) || {
-      id: String(resourceId),
-      title: "Research source",
-    }
+  const style = NODE_STYLES[node.type] || NODE_STYLES.concept;
+  const sourceIds = Array.isArray(node.resource_ids) ? node.resource_ids : [];
+  const sourcePapers = sourceIds.map(
+    (id) =>
+      papers.find((paper) => String(paper.id) === String(id)) || {
+        id: String(id),
+        title: "Research source",
+      }
   );
 
   return (
     <div className="max-h-[calc(100vh-13rem)] overflow-y-auto p-5">
-      {/* Identity */}
-
       <div className="flex items-start gap-3">
         <div
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${style.stroke} ${style.fill}`}
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.10] ${style.fill}`}
         >
           <Network className={`h-5 w-5 ${style.text}`} />
         </div>
 
         <div className="min-w-0">
-          <p className="break-words text-sm font-medium text-slate-200">
+          <p className="break-words text-sm font-medium text-slate-100">
             {node.name}
           </p>
-
-          <p
-            className={`mt-1 text-[10px] uppercase tracking-wide ${style.text}`}
-          >
+          <p className={`mt-1 text-[10px] uppercase tracking-wide ${style.text}`}>
             {formatNodeType(node.type)}
           </p>
         </div>
       </div>
-
-      {/* Graph role */}
 
       <div className="mt-4 grid grid-cols-2 gap-2">
         <MiniStat label="Connections" value={related.length} />
         <MiniStat label="Sources" value={sourceIds.length} />
       </div>
 
-      {/* Description */}
-
       {node.description && (
         <DetailSection title="Description">
-          <p className="text-xs leading-5 text-slate-500">
-            {node.description}
-          </p>
+          <p className="text-xs leading-5 text-slate-300">{node.description}</p>
         </DetailSection>
       )}
 
-      {/* Relationships */}
-
       <DetailSection title="Relationships">
         {related.length === 0 ? (
-          <div className="rounded-xl border border-white/[0.05] bg-slate-900/30 p-3">
-            <p className="text-xs text-slate-600">
-              No validated relationships are associated with this entity.
+          <div className="rounded-xl border border-white/[0.08] bg-slate-900/40 p-3">
+            <p className="text-xs text-slate-400">
+              No relationships are associated with this entity.
             </p>
           </div>
         ) : (
           <div className="space-y-2">
             {related.map((item, index) => (
-              <div
-                key={`${item.other.id}-${index}`}
-                className="rounded-xl border border-white/[0.05] bg-slate-900/40 p-3"
+              <button
+                type="button"
+                key={`${item.other.id}-${item.relationship}-${index}`}
+                onClick={() => onSelectNode(item.other)}
+                className="block w-full rounded-xl border border-white/[0.08] bg-slate-900/50 p-3 text-left transition hover:border-indigo-400/30 hover:bg-slate-900"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[9px] uppercase tracking-wide text-indigo-400">
+                  <span className="text-[9px] font-semibold uppercase tracking-wide text-indigo-300">
                     {formatRelationship(item.relationship)}
                   </span>
-
-                  <span className="text-[8px] text-slate-700">
+                  <span className="text-[8px] text-slate-500">
                     {item.direction}
                   </span>
                 </div>
 
-                <p className="mt-1 break-words text-xs text-slate-400">
+                <p className="mt-1 break-words text-xs text-slate-200">
                   {item.other.name}
                 </p>
-
-                <p className="mt-1 text-[9px] capitalize text-slate-700">
+                <p className="mt-1 text-[9px] text-slate-400">
                   {formatNodeType(item.other.type)}
                 </p>
 
-                {Array.isArray(item.resource_ids) &&
-                  item.resource_ids.length > 0 && (
-                    <p className="mt-2 text-[8px] text-slate-700">
-                      Supported by {item.resource_ids.length} source
-                      {item.resource_ids.length === 1 ? "" : "s"}
-                    </p>
-                  )}
-              </div>
+                {item.evidence && (
+                  <p className="mt-2 border-t border-white/[0.06] pt-2 text-[10px] leading-4 text-slate-400">
+                    "{item.evidence}"
+                  </p>
+                )}
+              </button>
             ))}
           </div>
         )}
       </DetailSection>
 
-      {/* Evidence */}
-
-      {Array.isArray(node.evidence) &&
-        node.evidence.length > 0 && (
-          <DetailSection title="Evidence">
-            <div className="space-y-2">
-              {node.evidence.map((item, index) => (
-                <div
-                  key={`${item.chunk_index}-${index}`}
-                  className="rounded-xl border border-cyan-400/[0.08] bg-cyan-400/[0.025] p-3"
-                >
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-3 w-3 text-cyan-400" />
-
-                    <span className="text-[9px] font-medium uppercase tracking-wide text-cyan-400">
-                      Chunk {item.chunk_index ?? "—"}
-                    </span>
-                  </div>
-
-                  {item.statement && (
-                    <p className="mt-2 text-[10px] leading-5 text-slate-500">
-                      "{item.statement}"
-                    </p>
-                  )}
+      {Array.isArray(node.evidence) && node.evidence.length > 0 && (
+        <DetailSection title="Evidence">
+          <div className="space-y-2">
+            {node.evidence.map((item, index) => (
+              <div
+                key={`${item.chunk_index ?? "chunk"}-${index}`}
+                className="rounded-xl border border-cyan-400/10 bg-cyan-400/[0.04] p-3"
+              >
+                <div className="flex items-center gap-2">
+                  <FileText className="h-3 w-3 text-cyan-300" />
+                  <span className="text-[9px] font-medium uppercase tracking-wide text-cyan-300">
+                    Chunk {item.chunk_index ?? "—"}
+                  </span>
                 </div>
-              ))}
-            </div>
-          </DetailSection>
-        )}
-
-      {/* Source papers */}
+                {item.statement && (
+                  <p className="mt-2 text-[10px] leading-5 text-slate-300">
+                    "{item.statement}"
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </DetailSection>
+      )}
 
       <DetailSection title="Source Papers">
         {sourcePapers.length === 0 ? (
-          <div className="rounded-xl border border-white/[0.05] bg-slate-900/40 p-3">
-            <p className="text-[10px] text-slate-600">
-              No source paper metadata is available.
-            </p>
-          </div>
+          <p className="text-[10px] leading-5 text-slate-400">
+            No source paper metadata is available for this entity.
+          </p>
         ) : (
           <div className="space-y-2">
             {sourcePapers.map((paper) => (
               <div
                 key={paper.id}
-                className="rounded-xl border border-white/[0.05] bg-slate-900/40 p-3"
+                className="rounded-xl border border-white/[0.08] bg-slate-900/50 p-3"
               >
                 <div className="flex items-start gap-2">
-                  <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-400" />
-
-                  <div className="min-w-0">
-                    <p className="text-[9px] uppercase tracking-wide text-slate-700">
-                      Research source
-                    </p>
-
-                    <p className="mt-1 break-words text-[10px] leading-4 text-slate-500">
-                      {paper.title}
-                    </p>
-                  </div>
+                  <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-300" />
+                  <p className="break-words text-[10px] leading-4 text-slate-300">
+                    {paper.title}
+                  </p>
                 </div>
               </div>
             ))}
@@ -1829,11 +1748,9 @@ function EntityDetails({ node, edges, nodes, papers }) {
         )}
       </DetailSection>
 
-      {/* Technical ID */}
-
       <DetailSection title="Graph Identity">
-        <div className="rounded-xl border border-white/[0.05] bg-slate-900/40 p-3">
-          <p className="break-all font-mono text-[9px] leading-4 text-slate-700">
+        <div className="rounded-xl border border-white/[0.08] bg-slate-900/50 p-3">
+          <p className="break-all font-mono text-[9px] leading-4 text-slate-300">
             {node.id}
           </p>
         </div>
@@ -1842,113 +1759,102 @@ function EntityDetails({ node, edges, nodes, papers }) {
   );
 }
 
-// ======================================================
-// Detail Section
-// ======================================================
-
 function DetailSection({ title, children }) {
   return (
     <div className="mt-6">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-600">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-400">
         {title}
       </p>
-
       <div className="mt-3">{children}</div>
     </div>
   );
 }
 
-// ======================================================
-// Mini Stat
-// ======================================================
-
 function MiniStat({ label, value }) {
   return (
-    <div className="rounded-xl border border-white/[0.05] bg-slate-900/35 px-3 py-2">
-      <p className="text-[8px] uppercase tracking-wide text-slate-700">
-        {label}
-      </p>
-
-      <p className="mt-1 text-sm font-medium text-slate-400">
-        {value}
-      </p>
+    <div className="rounded-xl border border-white/[0.08] bg-slate-900/50 px-3 py-2">
+      <p className="text-[8px] uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="mt-1 text-sm font-medium text-slate-100">{value}</p>
     </div>
   );
 }
-
-// ======================================================
-// Statistics
-// ======================================================
 
 function Stat({ label, value }) {
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-white/[0.05] bg-slate-950/40 px-3 py-2">
-      <span className="text-[9px] uppercase tracking-wide text-slate-700">
+    <div className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-slate-950/40 px-3 py-2">
+      <span className="text-[9px] uppercase tracking-wide text-slate-400">
         {label}
       </span>
-
-      <span className="text-xs font-medium text-slate-400">
-        {value}
-      </span>
+      <span className="text-xs font-medium text-slate-100">{value}</span>
     </div>
   );
 }
 
-// ======================================================
-// Loading
-// ======================================================
-
-function GraphLoading() {
+function GraphLoading({ generating = false }) {
   return (
-    <div className="flex h-full min-h-[620px] flex-col items-center justify-center">
-      <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-indigo-400/10 bg-indigo-500/[0.05]">
-        <Loader2 className="h-6 w-6 animate-spin text-indigo-400" />
+    <div className="flex min-h-[620px] flex-col items-center justify-center px-6 text-center">
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-indigo-200 bg-white">
+        <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
       </div>
-
-      <p className="mt-4 text-sm font-medium text-slate-300">
-        Building knowledge graph
+      <p className="mt-4 text-sm font-semibold text-slate-800">
+        {generating ? "Building knowledge graph" : "Loading research context"}
       </p>
-
-      <p className="mt-2 max-w-sm text-center text-xs leading-5 text-slate-600">
-        Retrieving relevant research evidence, extracting entities,
-        and validating relationships.
+      <p className="mt-2 max-w-sm text-xs leading-5 text-slate-500">
+        {generating
+          ? "Extracting entities and validating relationships from your selected sources."
+          : "Loading your notebook, sources, and saved graph."}
       </p>
     </div>
   );
 }
 
-// ======================================================
-// Empty State
-// ======================================================
-
-function GraphEmpty({ hasSources, hasGraph, onGenerate }) {
+function GraphPrompt({ title, description }) {
   return (
-    <div className="flex h-full min-h-[620px] flex-col items-center justify-center px-6 text-center">
-      <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan-400/10 bg-cyan-400/[0.05]">
-        <Network className="h-6 w-6 text-cyan-400" />
+    <div className="flex min-h-[620px] flex-col items-center justify-center px-6 text-center">
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-indigo-200 bg-white shadow-sm">
+        <BookOpen className="h-6 w-6 text-indigo-600" />
+      </div>
+      <h2 className="mt-5 text-sm font-semibold text-slate-800">{title}</h2>
+      <p className="mt-2 max-w-md text-xs leading-5 text-slate-500">
+        {description}
+      </p>
+    </div>
+  );
+}
+
+function GraphEmpty({ hasSources, hasGraph, hasSearch, onGenerate }) {
+  const title = hasSearch
+    ? "No matching entities"
+    : !hasSources
+      ? "No research sources selected"
+      : hasGraph
+        ? "No entities match the current filters"
+        : "Knowledge graph not generated";
+
+  const description = hasSearch
+    ? "Try another search term or choose a different entity type."
+    : !hasSources
+      ? "Add research papers to this notebook before generating a graph."
+      : hasGraph
+        ? "Clear the search or change the entity filter to see more of the graph."
+        : "Generate a graph to explore the entities and relationships in your research sources.";
+
+  return (
+    <div className="flex min-h-[620px] flex-col items-center justify-center px-6 text-center">
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-200 bg-white">
+        <Network className="h-6 w-6 text-indigo-600" />
       </div>
 
-      <h2 className="mt-5 text-sm font-medium text-slate-300">
-        {!hasSources
-          ? "No research sources selected"
-          : hasGraph
-            ? "No matching entities"
-            : "Knowledge graph not generated"}
-      </h2>
-
-      <p className="mt-2 max-w-md text-xs leading-5 text-slate-600">
-        {!hasSources
-          ? "Select research sources in your Research Notebook before generating a knowledge graph."
-          : hasGraph
-            ? "Try changing the search query or entity type filter."
-            : "Generate a graph to explore evidence-grounded entities and relationships discovered across the selected research sources."}
+      <h2 className="mt-5 text-sm font-semibold text-slate-800">{title}</h2>
+      <p className="mt-2 max-w-md text-xs leading-5 text-slate-500">
+        {description}
       </p>
 
-      {hasSources && !hasGraph && (
+      {!hasGraph && hasSources && !hasSearch && (
         <button
           type="button"
           onClick={onGenerate}
-          className="mt-5 flex items-center gap-2 rounded-xl bg-indigo-500 px-4 py-2.5 text-xs font-medium text-white transition hover:bg-indigo-400"
+          className="mt-5 flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-medium text-white transition hover:bg-indigo-500"
         >
           <RefreshCw className="h-3.5 w-3.5" />
           Generate graph
@@ -1958,10 +1864,6 @@ function GraphEmpty({ hasSources, hasGraph, onGenerate }) {
   );
 }
 
-// ======================================================
-// Graph Helpers
-// ======================================================
-
 function getNodeDegree(nodeId, edges) {
   return edges.reduce((count, edge) => {
     if (
@@ -1970,18 +1872,13 @@ function getNodeDegree(nodeId, edges) {
     ) {
       return count + 1;
     }
-
     return count;
   }, 0);
 }
 
 function getNodeRadius(node, edges) {
   const degree = getNodeDegree(node.id, edges);
-
-  if (node.type === "paper") {
-    return Math.min(31, 25 + degree * 1.4);
-  }
-
+  if (node.type === "paper") return Math.min(31, 25 + degree * 1.4);
   return Math.min(24, 18 + degree * 1.1);
 }
 
@@ -2006,24 +1903,13 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-// ======================================================
-// Text Helpers
-// ======================================================
-
 function truncate(value = "", max = 24) {
   const text = String(value);
-
-  if (text.length <= max) {
-    return text;
-  }
-
-  return `${text.slice(0, max)}…`;
+  return text.length <= max ? text : `${text.slice(0, max)}…`;
 }
 
 function formatNodeType(type = "") {
-  if (!type || type === "all") {
-    return type === "all" ? "All" : "Entity";
-  }
+  if (!type || type === "all") return type === "all" ? "All" : "Entity";
 
   return String(type)
     .replaceAll("_", " ")
@@ -2031,9 +1917,7 @@ function formatNodeType(type = "") {
 }
 
 function formatRelationship(relationship = "") {
-  if (!relationship) {
-    return "Related";
-  }
+  if (!relationship) return "Related";
 
   return String(relationship)
     .replaceAll("_", " ")

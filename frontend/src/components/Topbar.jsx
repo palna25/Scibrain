@@ -1,4 +1,4 @@
-import { Bell, Search, User } from "lucide-react";
+import { Search, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PaperSearch from "./PaperSearch";
@@ -43,16 +43,7 @@ function Topbar() {
 
       {/* Right side */}
       <div className="flex items-center gap-4">
-        {/* Notifications */}
-        <button
-          type="button"
-          aria-label="Notifications"
-          className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.07] bg-slate-900/60 text-slate-500 transition-all hover:border-indigo-400/15 hover:bg-slate-900/80 hover:text-slate-200"
-        >
-          <Bell className="h-4 w-4" />
-
-          <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-indigo-400 shadow-[0_0_8px_rgba(129,140,248,0.8)]" />
-        </button>
+        
 
         {/* Divider */}
         <div className="h-7 w-px bg-white/[0.06]" />

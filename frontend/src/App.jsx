@@ -15,8 +15,9 @@ import ResearchGaps from "./pages/ResearchGaps";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminLayout from "./components/AdminLayout";
 import AppLayout from "./components/AppLayout";
-/* import AdminUsers from "./pages/admin/AdminUsers";
- */
+import AdminUsers from "./pages/admin/AdminUsers";
+import AdminPapers from "./pages/admin/AdminPapers";
+import AdminSettings from "./pages/admin/AdminSettings";
 
 function ProtectedRoute({ children }) {
   const token = localStorage.getItem("scibrain_token");
@@ -170,20 +171,44 @@ function App() {
           />
 
 
-          {/* ================= ADMIN ================= */}
+           {/* ================= ADMIN ================= */}
 
           <Route
-          path="/admin"
-          element={
-            <AdminRoute>
+            path="/admin"
+            element={
+              <AdminRoute>
+                <AdminLayout>
+                  <AdminDashboard />
+                </AdminLayout>
+              </AdminRoute>
+            }
+          />
+
+          <Route
+            path="/admin/users"
+            element={
+              <AdminRoute>
+                <AdminUsers />
+              </AdminRoute>
+            }
+          />
+
+          <Route
+            path="/admin/papers"
+            element={
+              <AdminRoute>
+                <AdminPapers />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/settings"
+            element={
               <AdminLayout>
-                <AdminDashboard />
+                <AdminSettings />
               </AdminLayout>
-            </AdminRoute>
-          }
-        />
-{/*         <Route path="/admin/users" element={<AdminUsers />} />
- */}
+            }
+          />
           {/* ================= FALLBACK ================= */}
 
           <Route
